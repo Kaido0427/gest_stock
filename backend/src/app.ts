@@ -1,11 +1,15 @@
-import { Hono } from 'hono'
+import { Hono } from 'hono';
+import { authRoutes } from "./routes/auth.route.js";
+import "dotenv/config";
 
-const app = new Hono()
-
-export default app.get('/', (c) => {
-
-   // console.log('yo!!!!');
-    return c.text('Hello Kaido!')
-})
+const app = new Hono();
 
 
+
+app.get("/", (c) => {
+  return c.text("Hello Kaido!");
+});
+
+app.route("/auth", authRoutes);
+
+export default app;

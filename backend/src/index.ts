@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import app from './app.js'
-
-
+import { connectDB } from "./utils/db.js";
+await connectDB();
 serve({
   fetch: app.fetch,
   port: 3000
