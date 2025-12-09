@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { User } from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../utils/jtw.js";
+import { getCookie, deleteCookie } from 'hono/cookie'
 
 export class AuthController {
     static async register(c: Context) {
@@ -22,6 +23,7 @@ export class AuthController {
 
     static async login(c: Context) {
         const { email, password } = await c.req.json();
+        
 
         const user = await User.findOne({ email });
         if (!user) return c.json({ error: "Utilisateur introuvable" }, 404);
@@ -34,4 +36,5 @@ export class AuthController {
             token: generateToken(user._id.toString()),
         });
     }
+
 }
