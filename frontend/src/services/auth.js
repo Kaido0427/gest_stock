@@ -1,8 +1,8 @@
-const BASE_URL = "http://localhost:3000"; // l'URL de ton backend
+const BASE_URL = "/"; // l'URL de ton backend
 
 export async function login(email, password) {
   try {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetch(`${BASE_URL}auth/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -22,7 +22,7 @@ export async function login(email, password) {
 }
 
 export const logout = async () => {
-  const res = await fetch(`${BASE_URL}/auth/logout`, {
+  const res = await fetch(`${BASE_URL}auth/logout`, {
     method: "POST",
     credentials: "include",
   });

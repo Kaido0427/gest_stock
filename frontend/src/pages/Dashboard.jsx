@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import DashboardPage from "../components/DashboardPage";
@@ -7,13 +7,16 @@ import ProductsPage from "../components/produits/ProductsPage";
 import ReportsPage from "../components/ReportsPage";
 import SettingsPage from "../components/SettingsPage";
 import Login from "./Login";
+import { getProduits } from "../services/product";
 
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [cart, setCart] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // États pour les données
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [stats, setStats] = useState({
@@ -22,18 +25,70 @@ const Dashboard = () => {
     year: { sales: 0, transactions: 0, items: 0 },
   });
 
+  // Fonction pour charger les produits depuis l'API
+  const loadProducts = async () => {
+    setLoading(true);
+    try {
+      const data = await getProduits();
+      if (!data.error) {
+        setProducts(data);
+      } else {
+        console.error("Erreur lors du chargement des produits:", data.error);
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement des produits:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Charger les produits au montage du composant
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  // Fonction pour rafraîchir les produits (à passer aux composants enfants)
+  const handleRefreshProducts = () => {
+    loadProducts();
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     setIsLoggedIn(false);
   };
 
+  // Gestion des pages avec les données mises à jour
   const pages = {
     dashboard: (
-      <DashboardPage products={products} sales={sales} stats={stats} />
+      <DashboardPage 
+        products={products} 
+        sales={sales} 
+        stats={stats} 
+        onRefreshProducts={handleRefreshProducts}
+      />
     ),
-    sales: <SalesPage products={products} cart={cart} setCart={setCart} />,
-    products: <ProductsPage products={products} />,
-    reports: <ReportsPage stats={stats} products={products} />,
+    sales: (
+      <SalesPage 
+        products={products} 
+        cart={cart} 
+        setCart={setCart}
+        onRefreshProducts={handleRefreshProducts}
+      />
+    ),
+    products: (
+      <ProductsPage 
+        products={products} 
+        onRefresh={handleRefreshProducts}
+        loading={loading}
+      />
+    ),
+    reports: (
+      <ReportsPage 
+        stats={stats} 
+        products={products} 
+        sales={sales}
+      />
+    ),
     settings: <SettingsPage />,
   };
 
@@ -66,7 +121,18 @@ const Dashboard = () => {
 
         {/* Contenu principal */}
         <div className="flex-1 overflow-auto">
-          <div className="p-4 sm:p-6 lg:p-8">{pages[currentPage]}</div>
+          <div className="p-4 sm:p-6 lg:p-8">
+            {loading && currentPage === "products" ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Chargement des produits...</p>
+                </div>
+              </div>
+            ) : (
+              pages[currentPage]
+            )}
+          </div>
         </div>
       </div>
     </div>

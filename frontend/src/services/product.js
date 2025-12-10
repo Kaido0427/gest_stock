@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3000/produits"; // base route pour produits
+const API_URL = "/produit";
 
 // ➤ Ajouter un produit
 export async function addProduit(produit) {
@@ -91,7 +91,7 @@ export async function approvisionnerProduit(id, payload) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload), // { quantity, name?, expirationDate? }
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();

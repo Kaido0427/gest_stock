@@ -13,7 +13,7 @@ const LotSchema = new mongoose.Schema(
     {
         name: { type: String },                        // optionnel : numéro de lot
         quantity: { type: Number, required: true, min: 0 }, // quantité en unité de base
-        createdAt: { type: Date, default: Date.now },
+        createdAt: { type: Date, defaault: Date.now },
         expirationDate: { type: Date },               // optionnel pour produits périssables
     },
     { _id: false }

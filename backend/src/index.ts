@@ -1,8 +1,12 @@
+import 'dotenv/config'; 
 import { serve } from '@hono/node-server'
 import app from './app.js'
 import { connectDB } from "./utils/db.js";
-await connectDB();
 
+// Vérifiez que JWT_SECRET est chargé
+console.log('JWT_SECRET chargé:', process.env.JWT_SECRET ? '✅ OUI' : '❌ NON');
+
+await connectDB();
 
 serve({
 

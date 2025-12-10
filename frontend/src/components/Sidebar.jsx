@@ -91,3 +91,4 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
 };
 
 export default Sidebar;
+

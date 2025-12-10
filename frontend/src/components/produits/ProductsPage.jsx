@@ -1,21 +1,24 @@
 import React, { useState } from "react";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Package } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductModal from "./ProductModal";
+import ApprovisionnementModal from "./ApprovisionnementModal";
 import { deleteProduit } from "../../services/product";
 
-const ProductsPage = ({ products }) => {
-  const [isModalOpen, setModalOpen] = useState(false);
+const ProductsPage = ({ products, onRefresh }) => {
+  const [isProductModalOpen, setProductModalOpen] = useState(false);
+  const [isApprovisionnementModalOpen, setApprovisionnementModalOpen] =
+    useState(false);
   const [activeProduct, setActiveProduct] = useState(null);
 
   const handleEdit = (product) => {
     setActiveProduct(product);
-    setModalOpen(true);
+    setProductModalOpen(true);
   };
 
   const handleAdd = () => {
     setActiveProduct(null);
-    setModalOpen(true);
+    setProductModalOpen(true);
   };
 
   const handleDelete = async (id) => {
@@ -23,10 +26,23 @@ const ProductsPage = ({ products }) => {
 
     const res = await deleteProduit(id);
 
-    if (res.error) alert(res.error);
-    else alert("Produit supprimé");
+    if (res.error) {
+      alert(res.error);
+    } else {
+      alert("Produit supprimé");
+      onRefresh?.();
+    }
+  };
 
-    // Ici tu devras recharger la liste depuis le parent
+  const handleApprovisionner = (product) => {
+    setActiveProduct(product);
+    setApprovisionnementModalOpen(true);
+  };
+
+  // Fonction pour calculer le prix minimum parmi les unités
+  const getMinPrice = (units) => {
+    if (!units || units.length === 0) return 0;
+    return Math.min(...units.map((u) => u.price));
   };
 
   return (
@@ -58,13 +74,16 @@ const ProductsPage = ({ products }) => {
                   Catégorie
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Prix
+                  Unité de base
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Stock
+                  Prix à partir de
+                </th>
+                <th className="px6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Stock (unité de base)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Fournisseur
+                  Unités disponibles
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Actions
@@ -76,7 +95,7 @@ const ProductsPage = ({ products }) => {
               {products.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="6"
+                    colSpan="7"
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     Aucun produit disponible
@@ -86,14 +105,21 @@ const ProductsPage = ({ products }) => {
                 <AnimatePresence>
                   {products.map((product) => (
                     <motion.tr
-                      key={product.id}
+                      key={product._id}
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       className="hover:bg-gray-50"
                     >
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {product.name}
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900">
+                          {product.name}
+                        </div>
+                        {product.description && (
+                          <div className="text-sm text-gray-500 mt-1">
+                            {product.description}
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-6 py-4 text-gray-600">
@@ -101,41 +127,74 @@ const ProductsPage = ({ products }) => {
                       </td>
 
                       <td className="px-6 py-4 text-gray-900">
-                        {product.price.toLocaleString()} FCFA
+                        {product.baseUnit}
+                      </td>
+
+                      <td className="px-6 py-4 text-gray-900">
+                        {product.units?.length > 0 ? (
+                          <span className="font-semibold">
+                            {getMinPrice(product.units).toLocaleString()} FCFA
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">Non défini</span>
+                        )}
                       </td>
 
                       <td className="px-6 py-4">
                         <span
-                          className={`px-2 py-1 text-xs rounded-full ${
-                            product.stock < (product.minStock || 0)
+                          className={`px-3 py-1 text-sm rounded-full ${
+                            product.stockBase <= 0
                               ? "bg-red-100 text-red-800"
+                              : product.stockBase < 10
+                              ? "bg-yellow-100 text-yellow-800"
                               : "bg-green-100 text-green-800"
                           }`}
                         >
-                          {product.stock}
+                          {product.stockBase} {product.baseUnit}
                         </span>
                       </td>
 
                       <td className="px-6 py-4 text-gray-600">
-                        {product.supplier || "-"}
+                        <div className="flex flex-wrap gap-1">
+                          {product.units?.map((unit, index) => (
+                            <span
+                              key={index}
+                              className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                            >
+                              {unit.name} ({unit.quantityPerUnit})
+                            </span>
+                          ))}
+                          {(!product.units || product.units.length === 0) &&
+                            "-"}
+                        </div>
                       </td>
 
-                      <td className="px-6 py-4 flex gap-2">
-                        <button
-                          onClick={() => handleEdit(product)}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Modifier
-                        </button>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium px-3 py-1 bg-blue-50 rounded hover:bg-blue-100"
+                          >
+                            <Edit className="w-4 h-4" />
+                            Modifier
+                          </button>
 
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="flex items-center gap-1 text-red-600 hover:text-red-800 text-sm font-medium"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Supprimer
-                        </button>
+                          <button
+                            onClick={() => handleApprovisionner(product)}
+                            className="flex items-center gap-1 text-green-600 hover:text-green-800 text-sm font-medium px-3 py-1 bg-green-50 rounded hover:bg-green-100"
+                          >
+                            <Package className="w-4 h-4" />
+                            Approvisionner
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(product._id)}
+                            className="flex items-center gap-1 text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1 bg-red-50 rounded hover:bg-red-100"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Supprimer
+                          </button>
+                        </div>
                       </td>
                     </motion.tr>
                   ))}
@@ -146,10 +205,23 @@ const ProductsPage = ({ products }) => {
         </div>
       </div>
 
-      {/* MODAL : AJOUT / EDITION */}
+      {/* MODAL : AJOUT / EDITION PRODUIT */}
       <ProductModal
-        isOpen={isModalOpen}
-        onClose={() => setModalOpen(false)}
+        isOpen={isProductModalOpen}
+        onClose={() => {
+          setProductModalOpen(false);
+          onRefresh?.();
+        }}
+        product={activeProduct}
+      />
+
+      {/* MODAL : APPROVISIONNEMENT */}
+      <ApprovisionnementModal
+        isOpen={isApprovisionnementModalOpen}
+        onClose={() => {
+          setApprovisionnementModalOpen(false);
+          onRefresh?.();
+        }}
         product={activeProduct}
       />
     </div>
