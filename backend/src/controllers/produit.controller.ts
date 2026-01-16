@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { Produit } from "../models/produit.model.js";
 import mongoose from "mongoose";
+import { Vente } from "../models/vente.model.js";
 
 // Type pour les données de variante dans les requêtes
 interface VariantData {
@@ -237,5 +238,95 @@ export const approvisionnerVariant = async (c: Context) => {
     } catch (error) {
         const err = error as Error;
         return c.json({ error: err.message }, 500);
+    }
+};
+
+// ➤ Vendre une variante spécifique
+// ➤ Vendre une variante spécifique
+export const vendreProduit = async (c: Context) => {
+    console.group("🛒 [BACKEND] vendreProduit");
+    try {
+        const id = c.req.param("id"); // ID du produit
+        const { variantId, quantity } = await c.req.json();
+
+        console.log("➡ Requête reçue :", { produitId: id, variantId, quantity });
+
+        // Validation
+        if (!variantId) {
+            console.warn("❌ Variante manquante");
+            return c.json({ error: "ID de la variante requis" }, 400);
+        }
+        if (!quantity || quantity <= 0) {
+            console.warn("❌ Quantité invalide :", quantity);
+            return c.json({ error: "Quantité invalide" }, 400);
+        }
+
+        const produit = await Produit.findById(id);
+        if (!produit) {
+            console.warn("❌ Produit introuvable :", id);
+            return c.json({ error: "Produit introuvable" }, 404);
+        }
+
+        // Trouver la variante
+        const variant = produit.variants.find(v => v._id?.toString() === variantId);
+        if (!variant) {
+            console.warn("❌ Variante introuvable :", variantId);
+            return c.json({ error: "Variante introuvable" }, 404);
+        }
+
+        console.log("📊 Stock avant vente :", { variantId, oldStock: variant.stock });
+
+        // Vérifier le stock
+        if (variant.stock < quantity) {
+            console.warn("❌ Stock insuffisant :", { requested: quantity, available: variant.stock });
+            return c.json({
+                error: `Stock insuffisant. Stock disponible: ${variant.stock} pièces`
+            }, 400);
+        }
+
+        // Retirer du stock
+        const oldStock = variant.stock;
+        variant.stock -= quantity;
+        await produit.save();
+
+
+        // ✅ Enregistrement de la vente
+        const nouvelleVente = await Vente.create({
+            items: [{
+                productId: produit._id,
+                variantId: variant._id,
+                productName: produit.name,
+                variantName: variant.name,
+                quantity,
+                price: variant.price,
+                total: variant.price * quantity
+            }],
+            totalAmount: variant.price * quantity,
+            date: new Date()
+        });
+
+        console.log("🎉 Vente historisée :", nouvelleVente._id);
+
+        console.log("✅ Vente enregistrée :", {
+            variantId,
+            oldStock,
+            newStock: variant.stock,
+            quantitySold: quantity
+        });
+
+        return c.json({
+            success: true,
+            message: "Vente effectuée avec succès",
+            data: {
+                produit: { id: produit._id, name: produit.name },
+                variant: { id: variant._id, name: variant.name, oldStock, newStock: variant.stock, quantitySold: quantity, price: variant.price, totalAmount: variant.price * quantity }
+            }
+        });
+    } catch (error) {
+        const err = error as Error;
+        console.error("🔥 Erreur vendreProduit :", err);
+        return c.json({ error: err.message }, 500);
+    } finally {
+        console.groupEnd();
     }
 };

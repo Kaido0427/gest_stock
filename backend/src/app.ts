@@ -20,6 +20,9 @@ app.use('*', cors({
 // Vos routes
 import { authRoutes } from "./routes/auth.route.js";
 import produitRoutes from './routes/produit.route.js';
+import venteRoutes from './routes/vente.routes.js';
+
+app.route('/ventes', venteRoutes);
 app.route('/auth', authRoutes);
 app.route('/produit', produitRoutes);
 
@@ -29,19 +32,24 @@ const publicDir = join(__dirname, '..', 'public');
 // Middleware pour servir le frontend
 app.use('*', async (c, next) => {
   // Skip les routes API
-  if (c.req.path.startsWith('/auth') || c.req.path.startsWith('/produits')) {
+  if (
+    c.req.path.startsWith('/auth') ||
+    c.req.path.startsWith('/produit') ||
+    c.req.path.startsWith('/ventes')
+  ) {
     return await next();
   }
-  
+
+
   try {
     // Pour les requêtes du frontend
     let filePath = c.req.path === '/' ? 'index.html' : c.req.path.replace(/^\//, '');
     const fullPath = join(publicDir, filePath);
-    
+
     // Si le fichier existe, le servir
     if (existsSync(fullPath)) {
       const content = readFileSync(fullPath);
-      
+
       // Déterminer le type MIME
       if (filePath.endsWith('.html')) {
         c.header('Content-Type', 'text/html');
@@ -58,10 +66,10 @@ app.use('*', async (c, next) => {
       } else if (filePath.endsWith('.svg')) {
         c.header('Content-Type', 'image/svg+xml');
       }
-      
+
       return c.body(content);
     }
-    
+
     // Si fichier non trouvé, servir index.html (pour SPA)
     const indexPath = join(publicDir, 'index.html');
     if (existsSync(indexPath)) {
@@ -69,7 +77,7 @@ app.use('*', async (c, next) => {
       c.header('Content-Type', 'text/html');
       return c.html(html);
     }
-    
+
     return await next();
   } catch (error) {
     console.error('Error serving static file:', error);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import DashboardPage from "../components/DashboardPage";
-import SalesPage from "../components/SalesPage";
+import SalesPage from "../components/ventes/SalesPage";
 import ProductsPage from "../components/produits/ProductsPage";
 import ReportsPage from "../components/ReportsPage";
 import SettingsPage from "../components/SettingsPage";

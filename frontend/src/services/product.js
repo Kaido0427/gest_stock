@@ -143,3 +143,4 @@ export async function addVariantToProduit(produitId, nouvelleVariante) {
     variants: updatedVariants
   });
 }
+

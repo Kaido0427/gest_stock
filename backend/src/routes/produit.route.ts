@@ -6,7 +6,8 @@ import {
     updateProduit,
     deleteProduit,
     deleteVariant,
-    approvisionnerVariant
+    approvisionnerVariant,
+     vendreProduit
 } from '../controllers/produit.controller.js';
 
 const produitRoutes = new Hono();
@@ -21,6 +22,7 @@ produitRoutes.delete('/:id', deleteProduit);
 // Gestion des variantes
 produitRoutes.delete('/:id/variant', deleteVariant);
 produitRoutes.post('/:id/approvisionner', approvisionnerVariant);
+produitRoutes.post('/:id/vendre', vendreProduit);
 
 
 export default produitRoutes;
