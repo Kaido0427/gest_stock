@@ -281,3 +281,4 @@ export const getStatistiquesVentes = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
+

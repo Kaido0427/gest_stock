@@ -99,3 +99,14 @@ export async function getStatistiquesVentes(periode = "jour") {
     return { error: "Serveur injoignable" };
   }
 }
+
+export async function getAlertesStock(seuil = 10) {
+    try {
+        const res = await fetch(`${API_URL}/produits/alertes-stock?seuil=${seuil}`);
+        const data = await res.json();
+        if (!res.ok) return { error: data.error || "Erreur récupération alertes stock" };
+        return data;
+    } catch (err) {
+        return { error: "Serveur injoignable" };
+    }
+}

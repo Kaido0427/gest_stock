@@ -330,3 +330,33 @@ export const vendreProduit = async (c: Context) => {
         console.groupEnd();
     }
 };
+
+// ➤ Récupérer les variantes avec stock inférieur à un seuil
+export const getAlertesStock = async (c: Context) => {
+    try {
+        const seuil = parseInt(c.req.query('seuil') as string) || 10;
+
+        // On récupère tous les produits avec au moins une variante sous le seuil
+        const produits = await Produit.find({
+            "variants.stock": { $lt: seuil }
+        });
+
+        // On ne retourne que les variantes concernées
+        const alertes = produits.flatMap(p =>
+            p.variants
+             .filter(v => v.stock < seuil)
+             .map(v => ({
+                 produitId: p._id,
+                 produitName: p.name,
+                 variantId: v._id,
+                 variantName: v.name,
+                 stock: v.stock
+             }))
+        );
+
+        return c.json({ success: true, data: alertes });
+    } catch (err) {
+        const error = err as Error;
+        return c.json({ error: error.message }, 500);
+    }
+};
