@@ -102,7 +102,7 @@ export async function getStatistiquesVentes(periode = "jour") {
 
 export async function getAlertesStock(seuil = 10) {
     try {
-        const res = await fetch(`${API_URL}/produits/alertes-stock?seuil=${seuil}`);
+        const res = await fetch(`${API_URL}/produit/alertes-stock?seuil=${seuil}`);
         const data = await res.json();
         if (!res.ok) return { error: data.error || "Erreur récupération alertes stock" };
         return data;

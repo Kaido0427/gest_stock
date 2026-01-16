@@ -4,7 +4,8 @@ import {
   validerVente,
   getHistoriqueVentes,
   getVenteById,
-  getStatistiquesVentes
+  getStatistiquesVentes,
+  
 } from '../controllers/vente.controller.js';
 
 const venteRoutes = new Hono();

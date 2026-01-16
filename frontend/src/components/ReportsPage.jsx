@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Download, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
-import { getHistoriqueVentes, getStatistiquesVentes } from "../services/sale"; 
+import { getHistoriqueVentes, getStatistiquesVentes } from "../services/sale";
 
-// Composant pour une carte de stat
 const StatCard = ({ title, value, icon, color }) => (
   <button
     className={`p-4 border-2 rounded-lg transition-colors ${color.border} ${color.bg} hover:border-blue-500`}
@@ -15,12 +14,9 @@ const StatCard = ({ title, value, icon, color }) => (
   </button>
 );
 
-// Composant pour l'historique des ventes
 const VenteList = ({ ventes, page, pages, onPageChange }) => {
   if (!ventes || ventes.length === 0)
-    return (
-      <div className="text-center py-8 text-gray-400">Aucune vente disponible</div>
-    );
+    return <div className="text-center py-8 text-gray-400">Aucune vente disponible</div>;
 
   return (
     <div className="bg-white p-6 rounded-xl shadow">
@@ -41,9 +37,7 @@ const VenteList = ({ ventes, page, pages, onPageChange }) => {
             {ventes.map((vente) =>
               vente.items.map((item, idx) => (
                 <tr key={`${item.variantId}-${idx}`} className="border-t border-gray-200">
-                  <td className="px-4 py-2">
-                    {new Date(vente.date).toLocaleString()}
-                  </td>
+                  <td className="px-4 py-2">{new Date(vente.date).toLocaleString()}</td>
                   <td className="px-4 py-2">{item.productName}</td>
                   <td className="px-4 py-2">{item.variantName}</td>
                   <td className="px-4 py-2">{item.quantity}</td>
@@ -56,7 +50,6 @@ const VenteList = ({ ventes, page, pages, onPageChange }) => {
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="flex justify-center items-center gap-4 mt-4">
         <button
           disabled={page <= 1}
@@ -124,7 +117,6 @@ const ReportsPage = () => {
         </button>
       </div>
 
-      {/* Statistiques principales */}
       <div className="bg-white p-6 rounded-xl shadow">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
@@ -148,49 +140,35 @@ const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Graphique placeholder */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            Ventes par jour
-          </h2>
-          <div className="h-64 bg-gradient-to-t from-blue-50 to-transparent rounded-lg flex items-center justify-center">
-            <p className="text-gray-400">Graphique des ventes (à intégrer)</p>
-          </div>
-        </div>
-
-        {/* Top produits */}
-        <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Top produits</h2>
-          <div className="space-y-3">
-            {topProducts.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <p>Aucune donnée disponible</p>
-              </div>
-            ) : (
-              topProducts.map((product, i) => (
-                <div key={product._id || i} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-gray-800">{product.productName}</p>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, product.quantiteVendue)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                  <p className="font-bold text-gray-600">{product.quantiteVendue} Qté vendu</p>
+      <div className="bg-white p-6 rounded-xl shadow">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Top produits</h2>
+        <div className="space-y-3">
+          {topProducts.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <p>Aucune donnée disponible</p>
+            </div>
+          ) : (
+            topProducts.map((product, i) => (
+              <div key={product._id || i} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold flex-shrink-0">
+                  {i + 1}
                 </div>
-              ))
-            )}
-          </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-800">{product.productName}</p>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, product.quantiteVendue)}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <p className="font-bold text-gray-600">{product.quantiteVendue} Qté vendu</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Historique des ventes */}
       <VenteList ventes={ventes} page={page} pages={pages} onPageChange={fetchVentes} />
     </div>
   );
