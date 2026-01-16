@@ -1,6 +1,6 @@
-const API_URL = "/produit";
+const API_URL = "http://localhost:3000/produit";
 
-// ➤ Ajouter un produit
+// ➤ 1. Créer un produit avec variantes
 export async function addProduit(produit) {
   try {
     const res = await fetch(`${API_URL}`, {
@@ -20,7 +20,7 @@ export async function addProduit(produit) {
   }
 }
 
-// ➤ Récupérer tous les produits
+// ➤ 2. Récupérer tous les produits
 export async function getProduits() {
   try {
     const res = await fetch(`${API_URL}`);
@@ -34,7 +34,7 @@ export async function getProduits() {
   }
 }
 
-// ➤ Récupérer un produit par ID
+// ➤ 3. Récupérer un produit par ID
 export async function getProduit(id) {
   try {
     const res = await fetch(`${API_URL}/${id}`);
@@ -47,7 +47,7 @@ export async function getProduit(id) {
   }
 }
 
-// ➤ Modifier un produit (SANS modifier le stock)
+// ➤ 4. Modifier un produit
 export async function updateProduit(id, updates) {
   try {
     const res = await fetch(`${API_URL}/${id}`, {
@@ -67,7 +67,7 @@ export async function updateProduit(id, updates) {
   }
 }
 
-// ➤ Supprimer un produit
+// ➤ 5. Supprimer un produit
 export async function deleteProduit(id) {
   try {
     const res = await fetch(`${API_URL}/${id}`, {
@@ -83,15 +83,18 @@ export async function deleteProduit(id) {
   }
 }
 
-// ➤ Approvisionner un produit
-export async function approvisionnerProduit(id, payload) {
+// ➤ 6. Approvisionner une VARIANTE spécifique
+export async function approvisionnerVariant(produitId, variantId, quantity) {
   try {
-    const res = await fetch(`${API_URL}/${id}/approvisionner`, {
+    const res = await fetch(`${API_URL}/${produitId}/approvisionner`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        variantId,
+        quantity
+      }),
     });
 
     const data = await res.json();
@@ -101,4 +104,42 @@ export async function approvisionnerProduit(id, payload) {
   } catch (err) {
     return { error: "Serveur injoignable" };
   }
+}
+
+// ➤ 7. Supprimer une variante
+export async function deleteVariant(produitId, variantId) {
+  try {
+    const res = await fetch(`${API_URL}/${produitId}/variant`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        variantId
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Erreur suppression variante" };
+
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
+}
+
+// ➤ 8. Fonction helper pour ajouter une nouvelle variante à un produit existant
+export async function addVariantToProduit(produitId, nouvelleVariante) {
+  // Récupérer le produit actuel
+  const produit = await getProduit(produitId);
+  if (produit.error) return produit;
+
+  // Ajouter la nouvelle variante à la liste existante
+  const updatedVariants = [...produit.variants, nouvelleVariante];
+
+  // Mettre à jour le produit
+  return updateProduit(produitId, {
+    ...produit,
+    variants: updatedVariants
+  });
 }

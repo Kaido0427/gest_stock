@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Package } from "lucide-react";
 import { addProduit, updateProduit } from "../../services/product";
 
 const ProductModal = ({ isOpen, onClose, product }) => {
@@ -8,14 +8,14 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     name: "",
     description: "",
     category: "",
-    baseUnit: "",
-    units: [],
+    customCategory: "",
+    variants: [], // Remplace units et lots
   });
 
-  const [newUnit, setNewUnit] = useState({
+  const [newVariant, setNewVariant] = useState({
     name: "",
-    quantityPerUnit: 1,
     price: 0,
+    stock: 0,
   });
 
   // Remplit le formulaire en mode édition
@@ -25,21 +25,21 @@ const ProductModal = ({ isOpen, onClose, product }) => {
         name: product.name || "",
         description: product.description || "",
         category: product.category || "",
-        baseUnit: product.baseUnit || "",
-        units: product.units || [],
+        customCategory: "",
+        variants: product.variants || [], // Charger les variantes existantes
       });
     } else {
       setForm({
         name: "",
         description: "",
         category: "",
-        baseUnit: "",
-        units: [],
+        customCategory: "",
+        variants: [], // Variantes vide pour nouveau produit
       });
-      setNewUnit({
+      setNewVariant({
         name: "",
-        quantityPerUnit: 1,
         price: 0,
+        stock: 0,
       });
     }
   }, [product]);
@@ -50,63 +50,99 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     setForm({ ...form, [e.target.name]: value });
   };
 
-  const handleUnitChange = (e) => {
+  const handleVariantChange = (e) => {
     const value =
       e.target.type === "number" ? Number(e.target.value) : e.target.value;
-    setNewUnit({ ...newUnit, [e.target.name]: value });
+    setNewVariant({ ...newVariant, [e.target.name]: value });
   };
 
-  const handleAddUnit = () => {
-    if (!newUnit.name || newUnit.quantityPerUnit <= 0 || newUnit.price < 0) {
-      alert("Veuillez remplir tous les champs de l'unité correctement");
+  const handleAddVariant = () => {
+    if (!newVariant.name || newVariant.price < 0 || newVariant.stock < 0) {
+      alert("Veuillez remplir tous les champs de la variante correctement");
       return;
     }
 
-    // Vérifier si l'unité existe déjà
-    const exists = form.units.some((unit) => unit.name === newUnit.name);
+    // Vérifier si une variante avec le même nom existe déjà
+    const exists = form.variants.some(v =>
+      v.name.toLowerCase() === newVariant.name.toLowerCase()
+    );
     if (exists) {
-      alert("Une unité avec ce nom existe déjà");
+      alert("Une variante avec ce nom existe déjà");
       return;
     }
 
     setForm({
       ...form,
-      units: [...form.units, { ...newUnit }],
+      variants: [...form.variants, { ...newVariant }],
     });
 
-    setNewUnit({
+    // Réinitialiser le formulaire de variante
+    setNewVariant({
       name: "",
-      quantityPerUnit: 1,
       price: 0,
+      stock: 0,
     });
   };
 
-  const handleRemoveUnit = (index) => {
-    const updatedUnits = [...form.units];
-    updatedUnits.splice(index, 1);
-    setForm({ ...form, units: updatedUnits });
+  const handleRemoveVariant = (index) => {
+    const updatedVariants = [...form.variants];
+    updatedVariants.splice(index, 1);
+    setForm({ ...form, variants: updatedVariants });
+  };
+
+  const handleUpdateVariant = (index, field, value) => {
+    const updatedVariants = [...form.variants];
+    updatedVariants[index] = {
+      ...updatedVariants[index],
+      [field]: field === 'price' || field === 'stock' ? Number(value) : value,
+      _id: updatedVariants[index]._id // Garder l'ID pour les mises à jour
+    };
+    setForm({ ...form, variants: updatedVariants });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.name || !form.baseUnit) {
-      alert("Le nom et l'unité de base sont obligatoires");
+    if (!form.name) {
+      alert("Le nom du produit est obligatoire");
       return;
     }
 
+    if (form.variants.length === 0) {
+      alert("Veuillez ajouter au moins une variante");
+      return;
+    }
+
+    // Gérer la catégorie personnalisée
+    const finalCategory = form.category === "Autre" && form.customCategory
+      ? form.customCategory
+      : form.category;
+
     let res;
 
+    const produitData = {
+      name: form.name,
+      description: form.description,
+      category: finalCategory,
+      variants: form.variants,
+    };
+
     if (product && product._id) {
-      res = await updateProduit(product._id, form);
+      // Pour l'édition, on doit envoyer toutes les variantes avec leurs _id
+      const variantsToSend = form.variants.map(v => ({
+        _id: v._id, // Garder l'ID pour les variantes existantes
+        name: v.name,
+        price: v.price,
+        stock: v.stock,
+      }));
+
+      res = await updateProduit(product._id, {
+        ...produitData,
+        variants: variantsToSend
+      });
     } else {
-      // Pour la création, on initialise stockBase à 0
-      const produitACreer = {
-        ...form,
-        stockBase: 0,
-        lots: [],
-      };
-      res = await addProduit(produitACreer);
+      // Pour la création, pas besoin d'_id
+      res = await addProduit(produitData);
     }
 
     if (res.error) {
@@ -118,13 +154,33 @@ const ProductModal = ({ isOpen, onClose, product }) => {
 
   if (!isOpen) return null;
 
+  // Calculer le stock total
+  const stockTotal = form.variants.reduce((sum, variant) => sum + variant.stock, 0);
+  // Calculer la valeur totale du stock
+  const valeurTotalStock = form.variants.reduce(
+    (sum, variant) => sum + (variant.price * variant.stock), 0
+  );
+
+  // Catégories d'exemple (peuvent venir d'une API)
+  const categories = [
+    "Alimentaire",
+    "Boissons",
+    "Ustensiles",
+    "Nettoyage",
+    "Cosmétique",
+    "Meuble",
+    "Électronique",
+    "Textile",
+    "Autre"
+  ];
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold">
@@ -151,7 +207,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 </label>
                 <input
                   name="name"
-                  placeholder="Ex: Huile végétale"
+                  placeholder="Ex: Lit"
                   value={form.name}
                   onChange={handleChange}
                   className="w-full border px-3 py-2 rounded-lg"
@@ -159,161 +215,182 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 />
               </div>
 
-              <div>   
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unité de base *
+                  Catégorie *
                 </label>
                 <select
-                  name="baseUnit"
-                  value={form.baseUnit}
+                  name="category"
+                  value={form.category}
                   onChange={handleChange}
                   className="w-full border px-3 py-2 rounded-lg"
                   required
                 >
                   <option value="">Sélectionner</option>
-                  <option value="L">Litre (L)</option>
-                  <option value="kg">Kilogramme (kg)</option>
-                  <option value="g">Gramme (g)</option>
-                  <option value="ml">Millilitre (ml)</option>
-                  <option value="pièce">Pièce</option>
-                  <option value="carton">Carton</option>
-                  <option value="paquet">Paquet</option>
-                  <option value="bidon">Bidon</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
+
+                {form.category === "Autre" && (
+                  <input
+                    name="customCategory"
+                    placeholder="Entrez une nouvelle catégorie"
+                    value={form.customCategory || ""}
+                    onChange={handleChange}
+                    className="w-full border px-3 py-2 rounded-lg mt-2"
+                  />
+                )}
               </div>
 
               <div className="md:col-span-2">
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    Catégorie *
-  </label>
-  <select
-    name="category"
-    value={form.category}
-    onChange={handleChange}
-    className="w-full border px-3 py-2 rounded-lg"
-    required
-  >
-    <option value="">Sélectionner</option>
-    <option value="Alimentaire">Alimentaire</option>
-    <option value="Nettoyage">Nettoyage</option>
-    <option value="Boissons">Boissons</option>
-    <option value="Papeterie">Papeterie</option>
-    <option value="Autre">Autre</option>
-  </select>
-
-  {/* Si l'utilisateur choisit "Autre", on affiche un input pour entrer la nouvelle catégorie */}
-  {form.category === "Autre" && (
-    <input
-      name="customCategory"
-      placeholder="Entrez une nouvelle catégorie"
-      value={form.customCategory || ""}
-      onChange={handleChange}
-      className="w-full border px-3 py-2 rounded-lg mt-2"
-    />
-  )}
-</div>
-
-
-              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
+                  Description (optionnel)
                 </label>
                 <textarea
                   name="description"
                   placeholder="Description du produit"
                   value={form.description}
                   onChange={handleChange}
-                  rows="3"
+                  rows="2"
                   className="w-full border px-3 py-2 rounded-lg"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section Unités de vente */}
+          {/* Section Variantes */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-700">
-                Unités de vente
+                Variantes du produit
               </h3>
-              <span className="text-sm text-gray-500">
-                {form.units.length} unité(s) définie(s)
-              </span>
+              <div className="text-right">
+                <span className="text-sm text-gray-500">
+                  {form.variants.length} variante(s)
+                </span>
+                {stockTotal > 0 && (
+                  <div className="text-sm font-medium text-blue-600">
+                    Stock total: {stockTotal} pièces
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Liste des unités existantes */}
-            {form.units.length > 0 && (
-              <div className="space-y-2">
-                {form.units.map((unit, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">{unit.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {unit.quantityPerUnit} {form.baseUnit} •{" "}
-                        {unit.price.toLocaleString()} FCFA
-                      </div>
+            {form.variants.length > 0 && (
+              <div className="space-y-3">
+                {/* En-tête du tableau */}
+                <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-700 border-b pb-2">
+                  <div className="col-span-4">Nom de la variante *</div>
+                  <div className="col-span-3">Prix (FCFA) *</div>
+                  <div className="col-span-3">Stock *</div>
+                  <div className="col-span-2">Actions</div>
+                </div>
+
+                {/* Liste des variantes */}
+                {form.variants.map((variant, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 items-center p-3 bg-gray-50 rounded-lg">
+                    <div className="col-span-4">
+                      <input
+                        type="text"
+                        value={variant.name}
+                        onChange={(e) => handleUpdateVariant(index, 'name', e.target.value)}
+                        placeholder="Ex: Lit une place"
+                        className="w-full border px-3 py-2 rounded-lg text-sm"
+                      />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveUnit(index)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        value={variant.price}
+                        onChange={(e) => handleUpdateVariant(index, 'price', e.target.value)}
+                        min="0"
+                        step="1"
+                        className="w-full border px-3 py-2 rounded-lg text-sm"
+                      />
+                    </div>
+
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        value={variant.stock}
+                        onChange={(e) => handleUpdateVariant(index, 'stock', e.target.value)}
+                        min="0"
+                        step="1"
+                        className="w-full border px-3 py-2 rounded-lg text-sm"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVariant(index)}
+                        className="text-red-500 hover:text-red-700 p-2"
+                        title="Supprimer cette variante"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Information additionnelle */}
+                    <div className="col-span-12 text-xs text-gray-500 mt-1 pl-2">
+                      Valeur du stock: {(variant.price * variant.stock).toLocaleString()} FCFA
+                    </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Formulaire d'ajout d'une nouvelle unité */}
-            <div className="p-4 border border-dashed border-gray-300 rounded-lg">
-              <h4 className="font-medium text-gray-700 mb-3">
-                Ajouter une unité
+            {/* Formulaire pour ajouter une nouvelle variante */}
+            <div className="p-4 border border-dashed border-blue-300 rounded-lg bg-blue-50/30">
+              <h4 className="font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Ajouter une nouvelle variante
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nom de l'unité
+                    Nom de la variante *
                   </label>
                   <input
                     name="name"
-                    placeholder="Ex: Bouteille 500ml"
-                    value={newUnit.name}
-                    onChange={handleUnitChange}
+                    placeholder="Ex: Lit deux places"
+                    value={newVariant.name}
+                    onChange={handleVariantChange}
                     className="w-full border px-3 py-2 rounded-lg"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantité en unité de base
-                  </label>
-                  <input
-                    type="number"
-                    name="quantityPerUnit"
-                    placeholder="Ex: 0.5"
-                    value={newUnit.quantityPerUnit}
-                    onChange={handleUnitChange}
-                    min="0.01"
-                    step="0.01"
-                    className="w-full border px-3 py-2 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Prix (FCFA)
+                    Prix (FCFA) *
                   </label>
                   <input
                     type="number"
                     name="price"
-                    placeholder="Ex: 1500"
-                    value={newUnit.price}
-                    onChange={handleUnitChange}
+                    placeholder="Ex: 35000"
+                    value={newVariant.price}
+                    onChange={handleVariantChange}
                     min="0"
+                    step="1"
+                    className="w-full border px-3 py-2 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Stock initial *
+                  </label>
+                  <input
+                    type="number"
+                    name="stock"
+                    placeholder="Ex: 4"
+                    value={newVariant.stock}
+                    onChange={handleVariantChange}
+                    min="0"
+                    step="1"
                     className="w-full border px-3 py-2 rounded-lg"
                   />
                 </div>
@@ -321,13 +398,38 @@ const ProductModal = ({ isOpen, onClose, product }) => {
 
               <button
                 type="button"
-                onClick={handleAddUnit}
-                className="mt-3 flex items-center gap-2 text-blue-600 hover:text-blue-800"
+                onClick={handleAddVariant}
+                className="mt-4 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full"
               >
                 <Plus className="w-4 h-4" />
-                Ajouter cette unité
+                Ajouter cette variante
               </button>
             </div>
+
+            {/* Statistiques */}
+            {form.variants.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Nombre de variantes:</span>
+                    <span className="font-medium">{form.variants.length}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Stock total:</span>
+                    <span className="font-medium text-blue-600">{stockTotal} pièces</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Valeur totale du stock:</span>
+                    <span className="font-medium text-green-600">{valeurTotalStock.toLocaleString()} FCFA</span>
+                  </div>
+                </div>
+
+                <div className="text-sm text-gray-600 p-3 bg-blue-50 rounded border border-blue-100">
+                  💡 <strong>Conseil :</strong> Ajoutez toutes les variantes de ce produit.
+                  Exemple pour "Lit": "Lit une place", "Lit deux places", "Lit enfant", etc.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Boutons d'action */}
@@ -341,7 +443,8 @@ const ProductModal = ({ isOpen, onClose, product }) => {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={form.variants.length === 0}
             >
               {product ? "Mettre à jour" : "Créer le produit"}
             </button>

@@ -19,9 +19,9 @@ app.use('*', cors({
 
 // Vos routes
 import { authRoutes } from "./routes/auth.route.js";
-import { produitRouter } from './routes/produit.route.js';
+import produitRoutes from './routes/produit.route.js';
 app.route('/auth', authRoutes);
-app.route('/produit', produitRouter);
+app.route('/produit', produitRoutes);
 
 // Chemin absolu vers le dossier public
 const publicDir = join(__dirname, '..', 'public');

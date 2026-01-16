@@ -1,20 +1,49 @@
 import type { Context } from "hono";
 import { Produit } from "../models/produit.model.js";
+import mongoose from "mongoose";
 
-// ➤ Ajouter un produit
+// Type pour les données de variante dans les requêtes
+interface VariantData {
+    _id?: string;
+    name: string;
+    price: number;
+    stock: number;
+}
+
+// ➤ 1. Créer un produit
 export const createProduit = async (c: Context) => {
     try {
         const body = await c.req.json();
-        const produit = await Produit.create(body);
 
-        return c.json({ message: "Produit créé avec succès", produit }, 201);
+        // Validation : au moins une variante est requise
+        if (!body.variants || body.variants.length === 0) {
+            return c.json({
+                error: "Le produit doit avoir au moins une variante"
+            }, 400);
+        }
+
+        // Validation : noms de variantes uniques dans ce produit
+        const variantNames = body.variants.map((v: VariantData) => v.name.toLowerCase());
+        const uniqueNames = new Set(variantNames);
+
+        if (variantNames.length !== uniqueNames.size) {
+            return c.json({
+                error: "Les noms des variantes doivent être uniques dans un produit"
+            }, 400);
+        }
+
+        const produit = await Produit.create(body);
+        return c.json({
+            message: "Produit créé avec succès",
+            produit
+        }, 201);
     } catch (error) {
         const err = error as Error;
         return c.json({ error: err.message }, 500);
     }
 };
 
-// ➤ Voir un produit par ID
+// ➤ 2. Voir un produit par ID
 export const getProduit = async (c: Context) => {
     try {
         const id = c.req.param("id");
@@ -28,7 +57,7 @@ export const getProduit = async (c: Context) => {
     }
 };
 
-// ➤ Voir tous les produits
+// ➤ 3. Voir tous les produits
 export const getAllProduits = async (c: Context) => {
     try {
         const produits = await Produit.find();
@@ -38,6 +67,8 @@ export const getAllProduits = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
+
+// ➤ 4. Mettre à jour un produit
 export const updateProduit = async (c: Context) => {
     try {
         const id = c.req.param("id");
@@ -46,79 +77,63 @@ export const updateProduit = async (c: Context) => {
         const produit = await Produit.findById(id);
         if (!produit) return c.json({ error: "Produit introuvable" }, 404);
 
-        // 🚫 --- Blocage total de modification du stock --- 🚫
-        const forbiddenStockFields = ["stock", "stockBase", "quantityStock", "stockTotal"];
-
-        for (const field of forbiddenStockFields) {
+        // ✅ Mise à jour des champs simples
+        const simpleFields = ["name", "description", "category"];
+        simpleFields.forEach((field) => {
             if (body[field] !== undefined) {
-                return c.json({
-                    error: `Le champ "${field}" ne peut pas être modifié directement. Utilisez l'approvisionnement.`
-                }, 400);
-            }
-        }
-
-        // ---- Mise à jour simple des champs ----
-        const simpleFields = ["name", "description", "baseUnit"];
-        simpleFields.forEach((f) => {
-            if (body[f] !== undefined) {
-                (produit as any)[f] = body[f];
+                (produit as any)[field] = body[field];
             }
         });
 
-        // ---- Mise à jour flexible des unités ----
-        if (Array.isArray(body.units)) {
-            body.units.forEach((unit: any) => {
-                const existing = produit.units.find(u => u.name === unit.name);
+        // ✅ Mise à jour des variantes
+        if (Array.isArray(body.variants)) {
+            // Vérifier les noms uniques
+            const variantNames = body.variants.map((v: VariantData) => v.name.toLowerCase());
+            const uniqueNames = new Set(variantNames);
 
-                if (existing) {
-                    existing.quantityPerUnit = unit.quantityPerUnit ?? existing.quantityPerUnit;
-                    existing.price = unit.price ?? existing.price;
+            if (variantNames.length !== uniqueNames.size) {
+                return c.json({
+                    error: "Les noms des variantes doivent être uniques"
+                }, 400);
+            }
+
+            // Mettre à jour ou ajouter des variantes
+            body.variants.forEach((variantData: VariantData) => {
+                // Si la variante a un _id, c'est une mise à jour
+                if (variantData._id) {
+                    // Trouver la variante par son _id
+                    const existingVariant = produit.variants.find(
+                        v => v._id && v._id.toString() === variantData._id
+                    );
+
+                    if (existingVariant) {
+                        existingVariant.name = variantData.name ?? existingVariant.name;
+                        existingVariant.price = variantData.price ?? existingVariant.price;
+                        existingVariant.stock = variantData.stock ?? existingVariant.stock;
+                    }
                 } else {
-                    produit.units.push(unit);
-                }
-            });
-        }
-
-        // ---- Mise à jour flexible des lots ----
-        if (Array.isArray(body.lots)) {
-            body.lots.forEach((lot: any) => {
-                const existing = produit.lots.find(l => l.name === lot.name);
-
-                if (existing) {
-                    existing.quantity = lot.quantity ?? existing.quantity;  // ⚠️ ceci modifie la quantité du lot mais PAS le stock directement
-                    existing.expirationDate = lot.expirationDate
-                        ? new Date(lot.expirationDate)
-                        : existing.expirationDate;
-                } else {
-                    produit.lots.push({
-                        name: lot.name || `LOT-${Date.now()}`,
-                        quantity: lot.quantity,
-                        expirationDate: lot.expirationDate ? new Date(lot.expirationDate) : undefined
+                    // Sinon, c'est une nouvelle variante
+                    produit.variants.push({
+                        name: variantData.name,
+                        price: variantData.price,
+                        stock: variantData.stock || 0
                     });
                 }
             });
         }
 
-        // ---- Recalcul automatique du stock basé sur les lots ----
-        if (Array.isArray(body.lots)) {
-            produit.stockBase = produit.lots.reduce((sum, l) => sum + l.quantity, 0);
-        }
-
         await produit.save();
-
         return c.json({
-            message: "Produit mis à jour avec flexibilité",
+            message: "Produit mis à jour avec succès",
             produit
         });
-
     } catch (error) {
         const err = error as Error;
         return c.json({ error: err.message }, 500);
     }
 };
 
-
-// ➤ Supprimer un produit
+// ➤ 5. Supprimer un produit
 export const deleteProduit = async (c: Context) => {
     try {
         const id = c.req.param("id");
@@ -132,29 +147,93 @@ export const deleteProduit = async (c: Context) => {
     }
 };
 
-// ➤ Approvisionner un produit : ajouter stock + lot
-export const approvisionnerProduit = async (c: Context) => {
+// ➤ 6. Supprimer une variante spécifique
+export const deleteVariant = async (c: Context) => {
     try {
         const id = c.req.param("id");
-        const { quantity, name, expirationDate } = await c.req.json();
+        const { variantId } = await c.req.json();
 
-        if (!quantity || quantity <= 0)
-            return c.json({ error: "Quantité invalide" }, 400);
+        if (!variantId) {
+            return c.json({ error: "ID de la variante requis" }, 400);
+        }
 
         const produit = await Produit.findById(id);
         if (!produit) return c.json({ error: "Produit introuvable" }, 404);
 
-        const lot = {
-            name: name || `Lot-${Date.now()}`,
-            quantity,
-            expirationDate: expirationDate ? new Date(expirationDate) : undefined
-        };
+        // Trouver l'index de la variante
+        const variantIndex = produit.variants.findIndex(
+            v => v._id && v._id.toString() === variantId
+        );
 
-        produit.lots.push(lot);
-        produit.stockBase += quantity;
+        if (variantIndex === -1) {
+            return c.json({ error: "Variante introuvable" }, 404);
+        }
+
+        // S'assurer qu'il reste au moins une variante
+        if (produit.variants.length <= 1) {
+            return c.json({
+                error: "Impossible de supprimer la dernière variante du produit"
+            }, 400);
+        }
+
+        // Supprimer la variante
+        produit.variants.splice(variantIndex, 1);
         await produit.save();
 
-        return c.json({ message: "Approvisionnement effectué", produit });
+        return c.json({
+            message: "Variante supprimée avec succès",
+            produit
+        });
+    } catch (error) {
+        const err = error as Error;
+        return c.json({ error: err.message }, 500);
+    }
+};
+
+// ➤ 7. APPROVISIONNER une variante spécifique
+export const approvisionnerVariant = async (c: Context) => {
+    try {
+        const id = c.req.param("id");
+        const { variantId, quantity } = await c.req.json();
+
+        // Validation
+        if (!variantId) {
+            return c.json({ error: "ID de la variante requis" }, 400);
+        }
+
+        if (!quantity || quantity <= 0) {
+            return c.json({ error: "Quantité invalide" }, 400);
+        }
+
+        const produit = await Produit.findById(id);
+        if (!produit) return c.json({ error: "Produit introuvable" }, 404);
+
+        // Trouver la variante
+        const variant = produit.variants.find(
+            v => v._id && v._id.toString() === variantId
+        );
+
+        if (!variant) {
+            return c.json({ error: "Variante introuvable" }, 404);
+        }
+
+        // Ajouter la quantité au stock
+        variant.stock += quantity;
+        await produit.save();
+
+        return c.json({
+            message: "Approvisionnement effectué",
+            variant: {
+                name: variant.name,
+                oldStock: variant.stock - quantity,
+                newStock: variant.stock,
+                quantityAdded: quantity
+            },
+            produit: {
+                id: produit._id,
+                name: produit.name
+            }
+        });
     } catch (error) {
         const err = error as Error;
         return c.json({ error: err.message }, 500);

@@ -1,4 +1,4 @@
-const BASE_URL = "/"; // l'URL de ton backend
+const BASE_URL = "http://localhost:3000/"; // l'URL de ton backend
 
 export async function login(email, password) {
   try {

@@ -1,35 +1,63 @@
-import mongoose from "mongoose";
+import mongoose, { Document, Schema, Types } from "mongoose";
 
-const UnitSchema = new mongoose.Schema(
+// ✅ Interface pour les variantes
+interface IVariant {
+    _id?: Types.ObjectId; // Ajouter _id optionnel
+    name: string;
+    price: number;
+    stock: number;
+}
+
+// ✅ Interface principale
+interface IProduit extends Document {
+    name: string;
+    description?: string;
+    category?: string;
+    variants: IVariant[];
+}
+
+const VariantSchema = new Schema<IVariant>(
     {
-        name: { type: String, required: true },         // nom de l’unité (ex: 500ml, Bidon 5L)
-        quantityPerUnit: { type: Number, required: true, min: 0 }, // conversion en unité de base
-        price: { type: Number, required: true, min: 0 },           // prix de cette unité
+        name: { 
+            type: String, 
+            required: true,
+            trim: true 
+        },
+        price: { 
+            type: Number, 
+            required: true, 
+            min: 0 
+        },
+        stock: { 
+            type: Number, 
+            required: true, 
+            default: 0,
+            min: 0 
+        }
     },
-    { _id: false }
+    { _id: true }
 );
 
-const LotSchema = new mongoose.Schema(
+const ProduitSchema = new Schema<IProduit>(
     {
-        name: { type: String },                        // optionnel : numéro de lot
-        quantity: { type: Number, required: true, min: 0 }, // quantité en unité de base
-        createdAt: { type: Date, defaault: Date.now },
-        expirationDate: { type: Date },               // optionnel pour produits périssables
+        name: { 
+            type: String, 
+            required: true, 
+            trim: true 
+        },
+        description: { 
+            type: String, 
+            trim: true 
+        },
+        category: { 
+            type: String, 
+            trim: true 
+        },
+        variants: [VariantSchema]
     },
-    { _id: false }
+    { 
+        timestamps: true
+    }
 );
 
-const ProduitSchema = new mongoose.Schema(
-    {
-        name: { type: String, required: true, trim: true },
-        description: { type: String, trim: true },
-        category: { type: String, trim: true },
-        stockBase: { type: Number, required: true, min: 0 }, // stock total en unité de base
-        baseUnit: { type: String, required: true },          // unité de base (L, kg, pièce…)
-        units: [UnitSchema],
-        lots: [LotSchema],
-    },
-    { timestamps: true }
-);
-
-export const Produit = mongoose.model("Produit", ProduitSchema);
+export const Produit = mongoose.model<IProduit>("Produit", ProduitSchema);

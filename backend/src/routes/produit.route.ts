@@ -1,18 +1,26 @@
-import { Hono } from "hono";
+import { Hono } from 'hono';
 import {
     createProduit,
     getProduit,
     getAllProduits,
     updateProduit,
     deleteProduit,
-    approvisionnerProduit
-} from "../controllers/produit.controller.js";
+    deleteVariant,
+    approvisionnerVariant
+} from '../controllers/produit.controller.js';
 
-export const produitRouter = new Hono();
+const produitRoutes = new Hono();
 
-produitRouter.post("/", createProduit);
-produitRouter.get("/", getAllProduits);
-produitRouter.get("/:id", getProduit);
-produitRouter.put("/:id", updateProduit);
-produitRouter.delete("/:id", deleteProduit);
-produitRouter.post("/:id/approvisionner", approvisionnerProduit);
+// CRUD principal
+produitRoutes.post('/', createProduit);
+produitRoutes.get('/', getAllProduits);
+produitRoutes.get('/:id', getProduit);
+produitRoutes.put('/:id', updateProduit);
+produitRoutes.delete('/:id', deleteProduit);
+
+// Gestion des variantes
+produitRoutes.delete('/:id/variant', deleteVariant);
+produitRoutes.post('/:id/approvisionner', approvisionnerVariant);
+
+
+export default produitRoutes;
