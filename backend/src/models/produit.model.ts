@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Types } from "mongoose";
 
 // ✅ Interface pour les variantes
 interface IVariant {
-    _id?: Types.ObjectId; // Ajouter _id optionnel
+    _id?: Types.ObjectId;
     name: string;
     price: number;
     stock: number;
@@ -14,6 +14,14 @@ interface IProduit extends Document {
     description?: string;
     category?: string;
     variants: IVariant[];
+    createdAt: Date;
+    updatedAt: Date;
+    metadata?: {
+        source?: string;
+        clientId?: string;
+        localId?: string;
+        syncId?: string;
+    };
 }
 
 const VariantSchema = new Schema<IVariant>(
@@ -53,7 +61,11 @@ const ProduitSchema = new Schema<IProduit>(
             type: String, 
             trim: true 
         },
-        variants: [VariantSchema]
+        variants: [VariantSchema],
+        metadata: {
+            type: Schema.Types.Mixed,
+            default: {}
+        }
     },
     { 
         timestamps: true
@@ -61,3 +73,4 @@ const ProduitSchema = new Schema<IProduit>(
 );
 
 export const Produit = mongoose.model<IProduit>("Produit", ProduitSchema);
+export type { IProduit };

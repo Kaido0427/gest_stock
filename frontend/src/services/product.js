@@ -1,3 +1,4 @@
+// frontend/src/services/product.js
 const API_URL = "http://localhost:3000/produit";
 
 // ➤ 1. Créer un produit avec variantes

@@ -1,3 +1,4 @@
+// frontend/src/services/auth.js
 const BASE_URL = "http://localhost:3000/"; // l'URL de ton backend
 
 export async function login(email, password) {
@@ -31,3 +32,4 @@ export const logout = async () => {
 
   return await res.json();
 };
+  
