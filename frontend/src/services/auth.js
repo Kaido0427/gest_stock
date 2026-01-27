@@ -23,13 +23,17 @@ export async function login(email, password) {
 }
 
 export const logout = async () => {
+  const token = localStorage.getItem("token");
+  
   const res = await fetch(`${BASE_URL}auth/logout`, {
     method: "POST",
-    credentials: "include",
+    headers: {
+      "Authorization": `Bearer ${token}`, 
+      "Content-Type": "application/json",
+    },
   });
 
   if (!res.ok) throw new Error("Erreur lors de la déconnexion");
 
   return await res.json();
 };
-  

@@ -5,11 +5,13 @@ import { LogOut } from "lucide-react";
 const LogoutButton = () => {
   const handleLogout = async () => {
     try {
-      await logout(); // Appel à ton API pour supprimer le token côté backend
-      localStorage.removeItem("token"); // supprime le token côté frontend
-      window.location.href = "/login"; // redirige directement vers Login.jsx
+   
+      await logout();
+      localStorage.removeItem("token");
+
+      window.location.href = "/login";
     } catch (error) {
-      console.error("Erreur logout:", error);
+      console.error("❌ Erreur logout:", error);
     }
   };
 
