@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import { authRoutes } from "./routes/auth.route.js";
 import produitRoutes from './routes/produit.route.js';
 import venteRoutes from './routes/vente.routes.js';
+import { boutiqueRouter } from './routes/boutique.routes.js';
 
 const app = new Hono();
 
@@ -18,6 +19,7 @@ app.use('*', cors({
 app.route('/auth', authRoutes);
 app.route('/produit', produitRoutes);
 app.route('/ventes', venteRoutes);
+app.route('/boutiques', boutiqueRouter);
 
 // Health check (optionnel mais pro)
 app.get('/', (c) => {

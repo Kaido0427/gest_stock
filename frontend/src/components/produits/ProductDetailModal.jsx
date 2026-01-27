@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { X, Package, Tag, DollarSign, Info } from "lucide-react";
+import { X, Package, Tag, DollarSign, Info, Store, MapPin, Phone } from "lucide-react";
 
 const ProductDetailModal = ({ isOpen, onClose, product }) => {
   if (!isOpen || !product) return null;
@@ -38,12 +38,39 @@ const ProductDetailModal = ({ isOpen, onClose, product }) => {
       >
         {/* HEADER */}
         <div className="flex justify-between items-start mb-6">
-          <div>
+          <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-800">{product.name}</h2>
             {product.description && (
               <p className="text-gray-600 mt-1">{product.description}</p>
             )}
-            <div className="flex gap-2 mt-2">
+            
+            {/* ✅ INFORMATIONS BOUTIQUE */}
+            {product.boutique_id && (
+              <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Store className="w-5 h-5 text-indigo-600 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-indigo-900">
+                      {product.boutique_id.name}
+                    </div>
+                    {product.boutique_id.address && (
+                      <div className="flex items-center gap-1 text-sm text-indigo-700 mt-1">
+                        <MapPin className="w-3 h-3" />
+                        {product.boutique_id.address}
+                      </div>
+                    )}
+                    {product.boutique_id.phone && (
+                      <div className="flex items-center gap-1 text-sm text-indigo-700 mt-1">
+                        <Phone className="w-3 h-3" />
+                        {product.boutique_id.phone}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-3">
               <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
                 {product.category || "Non catégorisé"}
               </span>

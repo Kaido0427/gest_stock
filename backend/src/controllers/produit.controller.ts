@@ -16,6 +16,13 @@ export const createProduit = async (c: Context) => {
     try {
         const body = await c.req.json();
 
+        // ✅ Validation : boutique_id est requis
+        if (!body.boutique_id) {
+            return c.json({
+                error: "L'ID de la boutique est requis"
+            }, 400);
+        }
+
         // Validation : au moins une variante est requise
         if (!body.variants || body.variants.length === 0) {
             return c.json({
@@ -48,7 +55,7 @@ export const createProduit = async (c: Context) => {
 export const getProduit = async (c: Context) => {
     try {
         const id = c.req.param("id");
-        const produit = await Produit.findById(id);
+        const produit = await Produit.findById(id).populate("boutique_id", "name address"); // ✅ Populate pour avoir les infos de la boutique
 
         if (!produit) return c.json({ error: "Produit introuvable" }, 404);
         return c.json(produit);
@@ -61,7 +68,24 @@ export const getProduit = async (c: Context) => {
 // ➤ 3. Voir tous les produits
 export const getAllProduits = async (c: Context) => {
     try {
-        const produits = await Produit.find();
+        const produits = await Produit.find().populate("boutique_id", "name address"); // ✅ Populate
+        return c.json(produits);
+    } catch (error) {
+        const err = error as Error;
+        return c.json({ error: err.message }, 500);
+    }
+};
+
+// ➤ 3b. Voir tous les produits d'une boutique spécifique
+export const getProduitsByBoutique = async (c: Context) => {
+    try {
+        const boutique_id = c.req.param("boutique_id");
+
+        if (!mongoose.Types.ObjectId.isValid(boutique_id)) {
+            return c.json({ error: "ID de boutique invalide" }, 400);
+        }
+
+        const produits = await Produit.find({ boutique_id }).populate("boutique_id", "name address");
         return c.json(produits);
     } catch (error) {
         const err = error as Error;
@@ -78,8 +102,8 @@ export const updateProduit = async (c: Context) => {
         const produit = await Produit.findById(id);
         if (!produit) return c.json({ error: "Produit introuvable" }, 404);
 
-        // ✅ Mise à jour des champs simples
-        const simpleFields = ["name", "description", "category"];
+        // ✅ Mise à jour des champs simples (y compris boutique_id)
+        const simpleFields = ["name", "description", "category", "boutique_id"];
         simpleFields.forEach((field) => {
             if (body[field] !== undefined) {
                 (produit as any)[field] = body[field];
@@ -242,7 +266,6 @@ export const approvisionnerVariant = async (c: Context) => {
 };
 
 // ➤ Vendre une variante spécifique
-// ➤ Vendre une variante spécifique
 export const vendreProduit = async (c: Context) => {
     console.group("🛒 [BACKEND] vendreProduit");
     try {
@@ -335,23 +358,29 @@ export const vendreProduit = async (c: Context) => {
 export const getAlertesStock = async (c: Context) => {
     try {
         const seuil = parseInt(c.req.query('seuil') as string) || 10;
+        const boutique_id = c.req.query('boutique_id'); // ✅ Filtrage optionnel par boutique
+
+        // ✅ Filtrer par boutique si fourni
+        const filter: any = { "variants.stock": { $lt: seuil } };
+        if (boutique_id) {
+            filter.boutique_id = boutique_id;
+        }
 
         // On récupère tous les produits avec au moins une variante sous le seuil
-        const produits = await Produit.find({
-            "variants.stock": { $lt: seuil }
-        });
+        const produits = await Produit.find(filter).populate("boutique_id", "name");
 
         // On ne retourne que les variantes concernées
         const alertes = produits.flatMap(p =>
             p.variants
-             .filter(v => v.stock < seuil)
-             .map(v => ({
-                 produitId: p._id,
-                 produitName: p.name,
-                 variantId: v._id,
-                 variantName: v.name,
-                 stock: v.stock
-             }))
+                .filter(v => v.stock < seuil)
+                .map(v => ({
+                    produitId: p._id,
+                    produitName: p.name,
+                    variantId: v._id,
+                    variantName: v.name,
+                    stock: v.stock,
+                    boutique: (p as any).boutique_id // ✅ Infos de la boutique
+                }))
         );
 
         return c.json({ success: true, data: alertes });

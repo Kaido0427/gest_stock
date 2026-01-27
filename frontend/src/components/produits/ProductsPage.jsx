@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Edit, Trash2, Package, Eye, Tag } from "lucide-react";
+import { Plus, Edit, Trash2, Package, Eye, Tag, Store } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductModal from "./ProductModal";
 import ApprovisionnementModal from "./ApprovisionnementModal";
@@ -127,6 +127,9 @@ const ProductsPage = ({ products, onRefresh }) => {
                   Produit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Boutique
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Catégorie
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -151,7 +154,7 @@ const ProductsPage = ({ products, onRefresh }) => {
               {products.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="7"
+                    colSpan="8"
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -191,6 +194,23 @@ const ProductsPage = ({ products, onRefresh }) => {
                               {product.description}
                             </div>
                           )}
+                        </td>
+
+                        {/* ✅ NOUVELLE COLONNE BOUTIQUE */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <Store className="w-4 h-4 text-indigo-500" />
+                            <div>
+                              <div className="font-medium text-gray-900">
+                                {product.boutique_id?.name || "Non définie"}
+                              </div>
+                              {product.boutique_id?.address && (
+                                <div className="text-xs text-gray-500">
+                                  {product.boutique_id.address}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </td>
 
                         <td className="px-6 py-4">
@@ -241,10 +261,10 @@ const ProductsPage = ({ products, onRefresh }) => {
                           <div className="space-y-1">
                             <span
                               className={`px-3 py-1 text-sm font-medium rounded-full inline-block ${stockTotal === 0
-                                  ? "bg-red-100 text-red-800"
-                                  : stockTotal < 10
-                                    ? "bg-amber-100 text-amber-800"
-                                    : "bg-green-100 text-green-800"
+                                ? "bg-red-100 text-red-800"
+                                : stockTotal < 10
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-green-100 text-green-800"
                                 }`}
                             >
                               {stockTotal} pièce(s)
@@ -358,7 +378,7 @@ const ProductsPage = ({ products, onRefresh }) => {
       {/* MODAL : DÉTAILS DU PRODUIT */}
       <ProductDetailModal
         isOpen={isDetailModalOpen}
-        onClose={() => setDetailModalOpen(false)}
+        onClose={() => setDetailModalModal(false)}
         product={activeProduct}
       />
     </div>

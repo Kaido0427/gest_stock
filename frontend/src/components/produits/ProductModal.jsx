@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Plus, Package } from "lucide-react";
+import { X, Plus, Store } from "lucide-react";
 import { addProduit, updateProduit } from "../../services/product";
+import { getAllBoutiques } from "../../services/boutique"; // ✅ Nouveau service
 
 const ProductModal = ({ isOpen, onClose, product }) => {
   const [form, setForm] = useState({
@@ -9,7 +10,8 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     description: "",
     category: "",
     customCategory: "",
-    variants: [], // Remplace units et lots
+    boutique_id: "", // ✅ Nouveau champ
+    variants: [],
   });
 
   const [newVariant, setNewVariant] = useState({
@@ -17,6 +19,27 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     price: 0,
     stock: 0,
   });
+
+  const [boutiques, setBoutiques] = useState([]); // ✅ Liste des boutiques
+  const [loadingBoutiques, setLoadingBoutiques] = useState(false);
+
+  // ✅ Charger les boutiques au montage
+  useEffect(() => {
+    const fetchBoutiques = async () => {
+      setLoadingBoutiques(true);
+      const res = await getAllBoutiques();
+      if (res.error) {
+        console.error("Erreur chargement boutiques:", res.error);
+      } else {
+        setBoutiques(res);
+      }
+      setLoadingBoutiques(false);
+    };
+
+    if (isOpen) {
+      fetchBoutiques();
+    }
+  }, [isOpen]);
 
   // Remplit le formulaire en mode édition
   useEffect(() => {
@@ -26,7 +49,8 @@ const ProductModal = ({ isOpen, onClose, product }) => {
         description: product.description || "",
         category: product.category || "",
         customCategory: "",
-        variants: product.variants || [], // Charger les variantes existantes
+        boutique_id: product.boutique_id?._id || product.boutique_id || "", // ✅ Support populate
+        variants: product.variants || [],
       });
     } else {
       setForm({
@@ -34,7 +58,8 @@ const ProductModal = ({ isOpen, onClose, product }) => {
         description: "",
         category: "",
         customCategory: "",
-        variants: [], // Variantes vide pour nouveau produit
+        boutique_id: "", // ✅ Vide pour nouveau produit
+        variants: [],
       });
       setNewVariant({
         name: "",
@@ -95,7 +120,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     updatedVariants[index] = {
       ...updatedVariants[index],
       [field]: field === 'price' || field === 'stock' ? Number(value) : value,
-      _id: updatedVariants[index]._id // Garder l'ID pour les mises à jour
+      _id: updatedVariants[index]._id
     };
     setForm({ ...form, variants: updatedVariants });
   };
@@ -105,6 +130,12 @@ const ProductModal = ({ isOpen, onClose, product }) => {
 
     if (!form.name) {
       alert("Le nom du produit est obligatoire");
+      return;
+    }
+
+    // ✅ Validation boutique
+    if (!form.boutique_id) {
+      alert("Veuillez sélectionner une boutique");
       return;
     }
 
@@ -124,13 +155,14 @@ const ProductModal = ({ isOpen, onClose, product }) => {
       name: form.name,
       description: form.description,
       category: finalCategory,
+      boutique_id: form.boutique_id, // ✅ Envoyer l'ID de la boutique
       variants: form.variants,
     };
 
     if (product && product._id) {
       // Pour l'édition, on doit envoyer toutes les variantes avec leurs _id
       const variantsToSend = form.variants.map(v => ({
-        _id: v._id, // Garder l'ID pour les variantes existantes
+        _id: v._id,
         name: v.name,
         price: v.price,
         stock: v.stock,
@@ -141,7 +173,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
         variants: variantsToSend
       });
     } else {
-      // Pour la création, pas besoin d'_id
+      // Pour la création
       res = await addProduit(produitData);
     }
 
@@ -161,7 +193,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     (sum, variant) => sum + (variant.price * variant.stock), 0
   );
 
-  // Catégories d'exemple (peuvent venir d'une API)
+  // Catégories d'exemple
   const categories = [
     "Alimentaire",
     "Boissons",
@@ -213,6 +245,36 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                   className="w-full border px-3 py-2 rounded-lg"
                   required
                 />
+              </div>
+
+              {/* ✅ NOUVEAU CHAMP BOUTIQUE */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                  <Store className="w-4 h-4" />
+                  Boutique *
+                </label>
+                <select
+                  name="boutique_id"
+                  value={form.boutique_id}
+                  onChange={handleChange}
+                  className="w-full border px-3 py-2 rounded-lg"
+                  required
+                  disabled={loadingBoutiques}
+                >
+                  <option value="">
+                    {loadingBoutiques ? "Chargement..." : "Sélectionner une boutique"}
+                  </option>
+                  {boutiques.map(boutique => (
+                    <option key={boutique._id} value={boutique._id}>
+                      {boutique.name} {boutique.address && `- ${boutique.address}`}
+                    </option>
+                  ))}
+                </select>
+                {boutiques.length === 0 && !loadingBoutiques && (
+                  <p className="text-xs text-red-600 mt-1">
+                    ⚠️ Aucune boutique disponible. Créez-en une d'abord.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -444,7 +506,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
             <button
               type="submit"
               className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={form.variants.length === 0}
+              disabled={form.variants.length === 0 || !form.boutique_id}
             >
               {product ? "Mettre à jour" : "Créer le produit"}
             </button>

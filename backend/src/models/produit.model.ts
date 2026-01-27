@@ -14,6 +14,7 @@ interface IProduit extends Document {
     description?: string;
     category?: string;
     variants: IVariant[];
+    boutique_id: Types.ObjectId; // ✅ Nouveau champ
     createdAt: Date;
     updatedAt: Date;
     metadata?: {
@@ -62,6 +63,11 @@ const ProduitSchema = new Schema<IProduit>(
             trim: true 
         },
         variants: [VariantSchema],
+        boutique_id: { // ✅ Nouveau champ
+            type: Schema.Types.ObjectId,
+            ref: "Boutique",
+            required: true
+        },
         metadata: {
             type: Schema.Types.Mixed,
             default: {}
