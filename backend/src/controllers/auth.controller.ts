@@ -6,14 +6,15 @@ import { getCookie, deleteCookie } from 'hono/cookie'
 
 export class AuthController {
     static async register(c: Context) {
-        const { email, password } = await c.req.json();
+        const { email, password,role } = await c.req.json();
 
         const exists = await User.findOne({ email });
+        
         if (exists) return c.json({ error: "Email déjà utilisé" }, 400);
 
         const hashed = await bcrypt.hash(password, 10);
 
-        const user = await User.create({ email, password: hashed });
+        const user = await User.create({ email, password: hashed, role });
 
         return c.json({
             message: "Compte créé",
