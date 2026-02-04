@@ -1,4 +1,3 @@
-# .github/workflows/deploy.yml
 name: Deploy to VPS
 
 on:
@@ -11,28 +10,24 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@master 
+      - name: Deploy with rsync
+        uses: burnett01/rsync-deployments@6.0.0
+        with:
+          switches: -avzr --delete --exclude='.env' --exclude='node_modules' --exclude='.git'
+          path: ./
+          remote_path: /var/www/gest_stock
+          remote_host: ${{ secrets.VPS_HOST }}
+          remote_user: ${{ secrets.VPS_USER }}
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: Restart services
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
-            mkdir -p /var/www/gest_stock
             cd /var/www/gest_stock
-            
-            if [ ! -d ".git" ]; then
-              git clone https://github.com/Kaido0427/gest_stock.git .
-            else
-              git pull origin main
-            fi
-            
-            npm ci
-            
-            pm2 delete all 2>/dev/null || true
-            cd /var/www/gest_stock/backend
-            pm2 start npm --name "backend" -- run dev
-            cd /var/www/gest_stock/frontend
-            pm2 start npm --name "frontend" -- run dev
+            npm install
+            pm2 restart all || (pm2 start /var/www/gest_stock/backend/package.json --name backend -- run dev && pm2 start /var/www/gest_stock/frontend/package.json --name frontend -- run dev)
             pm2 save
