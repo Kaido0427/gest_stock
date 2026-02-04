@@ -4,5 +4,5 @@ npm run dev
 ```
 
 ```
-open https://api.mahoutodji.online
+open https://api.mahoutodjii.online
 ```

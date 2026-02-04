@@ -1,5 +1,5 @@
 // frontend/src/services/product.js
-const API_URL = "https://api.mahoutodji.online/produit";
+const API_URL = "https://api.mahoutodjii.online/produit";
 
 // ➤ 1. Créer un produit avec variantes
 export async function addProduit(produit) {
