@@ -12,7 +12,7 @@ import LogoutButton from "./LogoutButton";
 
 const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, role, boutiqueName }) => {
   const menuItems = [
-    { id: "dashboard", label: "Tableau de bord", icon: Home, roles: ["admin"] },
+    { id: "dashboard", label: "Tableau de bord", icon: Home, roles: ["admin", "employe"] },
     { id: "sales", label: "Ventes", icon: ShoppingCart, roles: ["admin", "employe"] },
     { id: "products", label: "Produits", icon: Package, roles: ["admin"] },
     { id: "reports", label: "Rapports", icon: FileText, roles: ["admin"] },
