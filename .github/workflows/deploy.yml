@@ -8,26 +8,41 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Deploy with rsync
-        uses: burnett01/rsync-deployments@6.0.0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          switches: -avzr --delete --exclude='.env' --exclude='node_modules' --exclude='.git'
-          path: ./
-          remote_path: /var/www/gest_stock
-          remote_host: ${{ secrets.VPS_HOST }}
-          remote_user: ${{ secrets.VPS_USER }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
-      
-      - name: Restart services
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
+          node-version: '20'
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy files to VPS
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='backend/.env' \
+            --exclude='frontend/.env' \
+            --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}":/var/www/gest_stock || [ $? -eq 23 ] && echo "⚠️ Transfert terminé avec avertissements" || exit $?
+
+      - name: Run post-deployment commands
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}" << 'ENDSSH'
+            set -e
             cd /var/www/gest_stock
             npm install
-            pm2 restart all || (pm2 start /var/www/gest_stock/backend/package.json --name backend -- run dev && pm2 start /var/www/gest_stock/frontend/package.json --name frontend -- run dev)
+            pm2 restart all || (cd backend && pm2 start npm --name "backend" -- run dev && cd ../frontend && pm2 start npm --name "frontend" -- run dev)
             pm2 save
+            echo "✅ Déploiement terminé"
+          ENDSSH
