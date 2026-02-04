@@ -134,6 +134,7 @@ const Dashboard = () => {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         role={user?.role || "employe"} // rôle pour filtrer les menus
+        boutiqueName={user?.boutique?.name}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">

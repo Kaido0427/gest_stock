@@ -1,3 +1,4 @@
+// Sidebar.jsx - MODIFIÉ
 import React from "react";
 import {
   Home,
@@ -8,7 +9,8 @@ import {
   X,
 } from "lucide-react";
 import LogoutButton from "./LogoutButton";
-const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, role }) => {
+
+const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, role, boutiqueName }) => {
   const menuItems = [
     { id: "dashboard", label: "Tableau de bord", icon: Home, roles: ["admin"] },
     { id: "sales", label: "Ventes", icon: ShoppingCart, roles: ["admin", "employe"] },
@@ -41,7 +43,7 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, role })
         <div className="p-4 sm:p-6 border-b flex items-center justify-between">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-blue-600">
-              Ma Boutique
+              {boutiqueName || "Ma Boutique"}
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">Gestion complète</p>
           </div>

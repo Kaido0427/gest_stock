@@ -3,6 +3,7 @@ import { User } from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../utils/jtw.js";
 import jwt from "jsonwebtoken";
+import { Boutique } from "../models/boutique.model.js";
 
 const tokenBlacklist = new Set<string>();
 
@@ -87,45 +88,52 @@ export class AuthController {
         }
     }
 static async getMe(c: Context) {
-    try {
-        const authHeader = c.req.header("Authorization");
-        const token = authHeader?.replace("Bearer ", "");
-
-        if (!token) {
-            return c.json({ error: "Token manquant" }, 401);
-        }
-
-        if (tokenBlacklist.has(token)) {
-            return c.json({ error: "Token invalide (déconnecté)" }, 401);
-        }
-
-        const decoded = jwt.verify(
-            token, 
-            process.env.JWT_SECRET!
-        ) as { userId: string };
-
-        console.log("🔵 Token décodé:", decoded); // ← AJOUTE CECI
-        console.log("🔵 userId:", decoded.userId); // ← AJOUTE CECI
-
-        const user = await User.findById(decoded.userId).select("-password");
-        
-        console.log("🔵 User trouvé:", user); // ← AJOUTE CECI
-        
-        if (!user) {
-            return c.json({ error: "Utilisateur introuvable" }, 404);
-        }
-
-        return c.json({
-            id: user._id,
-            email: user.email,
-            role: user.role,
-        });
-    } catch (error) {
-        console.error("❌ Erreur getMe:", error);
-        return c.json({ error: "Token invalide ou expiré" }, 401);
+  try {
+    const authHeader = c.req.header("Authorization");
+    const token = authHeader?.replace("Bearer ", "");
+    
+    if (!token) {
+      return c.json({ error: "Token manquant" }, 401);
     }
+    
+    if (tokenBlacklist.has(token)) {
+      return c.json({ error: "Token invalide (déconnecté)" }, 401);
+    }
+    
+    const decoded = jwt.verify(
+      token, 
+      process.env.JWT_SECRET!
+    ) as { userId: string };
+    
+    const user = await User.findById(decoded.userId).select("-password");
+    
+    if (!user) {
+      return c.json({ error: "Utilisateur introuvable" }, 404);
+    }
+    
+    // Récupérer la boutique SEULEMENT si ce n'est PAS un admin
+    let boutique = null;
+    if (user.role !== "admin") {
+      boutique = await Boutique.findOne({ responsable_id: user._id });
+    }
+    
+    return c.json({
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      boutique: boutique ? {
+        id: boutique._id,
+        name: boutique.name,
+        description: boutique.description,
+        address: boutique.address,
+        phone: boutique.phone
+      } : null
+    });
+  } catch (error) {
+    console.error("❌ Erreur getMe:", error);
+    return c.json({ error: "Token invalide ou expiré" }, 401);
+  }
 }
-
     // ✅ Middleware pour protéger d'autres routes (optionnel)
     static async verifyToken(c: Context, next: any) {
         const authHeader = c.req.header("Authorization");
