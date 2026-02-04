@@ -1,5 +1,5 @@
 // frontend/src/services/auth.js
-const BASE_URL = "https://api.mahoutondji.online";
+const BASE_URL = "https://api.mahoutodji.online";
 
 export async function login(email, password) {
   console.log("🔵 Tentative de connexion à:", `${BASE_URL}/auth/login`);
