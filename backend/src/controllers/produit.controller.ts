@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { Produit } from "../models/produit.model.js";
 import mongoose from "mongoose";
 import { Vente } from "../models/vente.model.js";
+import { Boutique } from "../models/boutique.model.js";
 
 // Type pour les données de variante dans les requêtes
 interface VariantData {
@@ -354,38 +355,41 @@ export const vendreProduit = async (c: Context) => {
     }
 };
 
-// ➤ Récupérer les variantes avec stock inférieur à un seuil
 export const getAlertesStock = async (c: Context) => {
     try {
-        const seuil = parseInt(c.req.query('seuil') as string) || 10;
-        const boutique_id = c.req.query('boutique_id'); // ✅ Filtrage optionnel par boutique
+        console.log("🔵 getAlertesStock appelé");
+        const { seuil = 10, boutique_id } = c.req.query();
+        console.log("🔵 Params:", { seuil, boutique_id });
 
-        // ✅ Filtrer par boutique si fourni
-        const filter: any = { "variants.stock": { $lt: seuil } };
+        let query: any = {};
         if (boutique_id) {
-            filter.boutique_id = boutique_id;
+            query.boutique_id = boutique_id;
         }
 
-        // On récupère tous les produits avec au moins une variante sous le seuil
-        const produits = await Produit.find(filter).populate("boutique_id", "name");
+        const produits = await Produit.find(query);
+        console.log("🔵 Produits trouvés:", produits.length);
 
-        // On ne retourne que les variantes concernées
-        const alertes = produits.flatMap(p =>
-            p.variants
-                .filter(v => v.stock < seuil)
-                .map(v => ({
-                    produitId: p._id,
-                    produitName: p.name,
-                    variantId: v._id,
-                    variantName: v.name,
-                    stock: v.stock,
-                    boutique: (p as any).boutique_id // ✅ Infos de la boutique
-                }))
-        );
+        const alertes: any[] = [];
+        for (const produit of produits) {
+            for (const variant of produit.variants) {
+                if (variant.stock <= parseInt(seuil as string)) {
+                    alertes.push({
+                        produitId: produit._id,
+                        produitName: produit.name,
+                        variantId: variant._id,
+                        variantName: variant.name,
+                        stock: variant.stock,
+                        boutiqueId: produit.boutique_id
+                    });
+                }
+            }
+        }
+
+        console.log("🔵 Alertes générées:", alertes.length);
 
         return c.json({ success: true, data: alertes });
-    } catch (err) {
-        const error = err as Error;
-        return c.json({ error: error.message }, 500);
+    } catch (error) {
+        console.error("❌ Erreur getAlertesStock:", error);
+        return c.json({ error: (error as Error).message }, 500);
     }
 };

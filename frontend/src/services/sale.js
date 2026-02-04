@@ -71,42 +71,71 @@ export async function validerVente(venteData) {
   }
 }
 
-// ➤ Récupérer l'historique des ventes
-export async function getHistoriqueVentes(params = {}) {
+export async function getStatistiquesVentes(periode = "jour", boutiqueId = null) {
   try {
-    const queryParams = new URLSearchParams(params).toString();
-    const res = await fetch(`${API_URL}/ventes?${queryParams}`);
-    const data = await res.json();
-
-    if (!res.ok) return { error: data.error || "Erreur récupération des ventes" };
-
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ Récupérer les statistiques
-export async function getStatistiquesVentes(periode = "jour") {
-  try {
-    const res = await fetch(`${API_URL}/ventes/stats?periode=${periode}`);
+    const url = boutiqueId 
+      ? `${API_URL}/ventes/stats?periode=${periode}&boutique_id=${boutiqueId}`
+      : `${API_URL}/ventes/stats?periode=${periode}`;
+    
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
     const data = await res.json();
 
     if (!res.ok) return { error: data.error || "Erreur récupération des statistiques" };
-
     return data;
   } catch (err) {
     return { error: "Serveur injoignable" };
   }
 }
 
-export async function getAlertesStock(seuil = 10) {
-    try {
-        const res = await fetch(`${API_URL}/produit/alertes-stock?seuil=${seuil}`);
-        const data = await res.json();
-        if (!res.ok) return { error: data.error || "Erreur récupération alertes stock" };
-        return data;
-    } catch (err) {
-        return { error: "Serveur injoignable" };
-    }
+export async function getHistoriqueVentes(params = {}) {
+  try {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append("limit", params.limit);
+    if (params.boutiqueId) queryParams.append("boutique_id", params.boutiqueId);
+    
+    const res = await fetch(`${API_URL}/ventes?${queryParams}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const data = await res.json();
+
+    if (!res.ok) return { error: data.error || "Erreur récupération ventes" };
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
+}
+
+export async function getAlertesStock(seuil = 10, boutiqueId = null) {
+  try {
+    const url = boutiqueId
+      ? `${API_URL}/produit/alertes-stock?seuil=${seuil}&boutique_id=${boutiqueId}`
+      : `${API_URL}/produit/alertes-stock?seuil=${seuil}`;
+    
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const data = await res.json();
+
+    if (!res.ok) return { error: data.error || "Erreur récupération alertes stock" };
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
+}
+
+// NOUVEAU : Récupérer la liste des boutiques
+export async function getBoutiques() {
+  try {
+    const res = await fetch(`${API_URL}/boutiques`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const data = await res.json();
+
+    if (!res.ok) return { error: data.error || "Erreur récupération boutiques" };
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
 }

@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import { Vente } from "../models/vente.model.js";
 import { Produit } from "../models/produit.model.js";
+import { Boutique } from "../models/boutique.model.js";
+import type { Types } from "mongoose";
 
 // ➤ Enregistrer une vente complète
 export const validerVente = async (c: Context) => {
@@ -103,22 +105,26 @@ export const validerVente = async (c: Context) => {
   }
 };
 
-// ➤ Récupérer l'historique des ventes
+// ➤ Récupérer l'historique des ventes (avec filtre boutique)
 export const getHistoriqueVentes = async (c: Context) => {
     try {
-        const { limit = 50, page = 1, dateFrom, dateTo } = c.req.query();
+        console.log("🔵 getHistoriqueVentes appelé");
+        const { limit = 50, page = 1, dateFrom, dateTo, boutique_id } = c.req.query();
 
         const query: any = {};
 
-        // Filtrer par date si fourni
+        if (boutique_id) {
+            const produits = await Produit.find({ boutique_id: boutique_id });
+            const productIds = produits.map(p => p._id);
+            if (productIds.length > 0) {
+                query["items.productId"] = { $in: productIds };
+            }
+        }
+
         if (dateFrom || dateTo) {
             query.date = {};
-            if (dateFrom) {
-                query.date.$gte = new Date(dateFrom as string);
-            }
-            if (dateTo) {
-                query.date.$lte = new Date(dateTo as string);
-            }
+            if (dateFrom) query.date.$gte = new Date(dateFrom as string);
+            if (dateTo) query.date.$lte = new Date(dateTo as string);
         }
 
         const limitNum = parseInt(limit as string);
@@ -126,41 +132,124 @@ export const getHistoriqueVentes = async (c: Context) => {
         const skip = (pageNum - 1) * limitNum;
 
         const [ventes, total] = await Promise.all([
-            Vente.find(query)
-                .sort({ date: -1 })
-                .skip(skip)
-                .limit(limitNum),
+            Vente.find(query).sort({ date: -1 }).skip(skip).limit(limitNum),
             Vente.countDocuments(query)
         ]);
 
-        // Calculer les statistiques
-        const totalMontant = await Vente.aggregate([
-            { $match: query },
-            { $group: { _id: null, total: { $sum: "$totalAmount" } } }
-        ]);
-
-        const totalArticles = await Vente.aggregate([
-            { $match: query },
-            { $unwind: "$items" },
-            { $group: { _id: null, total: { $sum: "$items.quantity" } } }
-        ]);
+        // Calcul simple sans aggregation
+        let totalMontant = 0;
+        let totalArticles = 0;
+        
+        for (const vente of ventes) {
+            totalMontant += vente.totalAmount;
+            for (const item of vente.items) {
+                totalArticles += item.quantity;
+            }
+        }
 
         return c.json({
             success: true,
             data: {
                 ventes,
-                pagination: {
-                    total,
-                    page: pageNum,
-                    limit: limitNum,
-                    pages: Math.ceil(total / limitNum)
+                pagination: { 
+                    total, 
+                    page: pageNum, 
+                    limit: limitNum, 
+                    pages: Math.ceil(total / limitNum) 
                 },
                 statistiques: {
-                    totalMontant: totalMontant[0]?.total || 0,
-                    totalArticles: totalArticles[0]?.total || 0,
+                    totalMontant,
+                    totalArticles,
                     nombreVentes: total
                 }
             }
+        });
+    } catch (error) {
+        console.error("❌ ERREUR:", error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+};
+// ➤ getStatistiquesVentes
+export const getStatistiquesVentes = async (c: Context) => {
+    try {
+        const { periode = "jour", boutique_id } = c.req.query();
+
+        let matchStage: any = {};
+        
+        if (boutique_id) {
+            const produits = await Produit.find({ boutique_id: boutique_id });
+            const productIds = produits.map(p => p._id);
+            if (productIds.length > 0) {
+                matchStage = { "items.productId": { $in: productIds } };
+            }
+        }
+
+        let groupFormat: any;
+        switch (periode) {
+            case "jour":
+                groupFormat = { year: { $year: "$date" }, month: { $month: "$date" }, day: { $dayOfMonth: "$date" } };
+                break;
+            case "mois":
+                groupFormat = { year: { $year: "$date" }, month: { $month: "$date" } };
+                break;
+            case "annee":
+                groupFormat = { year: { $year: "$date" } };
+                break;
+            default:
+                groupFormat = { year: { $year: "$date" }, month: { $month: "$date" }, day: { $dayOfMonth: "$date" } };
+        }
+
+        const globalStats = await Vente.aggregate([
+            { $match: matchStage },
+            {
+                $group: {
+                    _id: null,
+                    totalVentes: { $sum: 1 },
+                    montantTotal: { $sum: "$totalAmount" },
+                    articlesVendus: { $sum: { $sum: "$items.quantity" } },
+                    moyennePanier: { $avg: "$totalAmount" }
+                }
+            }
+        ]);
+
+        const topProduits = await Vente.aggregate([
+            { $match: matchStage },
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: { productId: "$items.productId", variantName: "$items.variantName" },
+                    productName: { $first: "$items.productName" },
+                    quantiteVendue: { $sum: "$items.quantity" },
+                    montantTotal: { $sum: "$items.total" }
+                }
+            },
+            { $sort: { quantiteVendue: -1 } },
+            { $limit: 10 }
+        ]);
+
+        return c.json({
+            success: true,
+            data: {
+                periode,
+                global: globalStats[0] || { totalVentes: 0, montantTotal: 0, articlesVendus: 0, moyennePanier: 0 },
+                topProduits
+            }
+        });
+    } catch (error) {
+        console.error("❌ Erreur:", error);
+        return c.json({ error: (error as Error).message }, 500);
+    }
+};
+// ➤ NOUVELLE API : Récupérer toutes les boutiques (pour admin)
+export const getBoutiques = async (c: Context) => {
+    try {
+        const boutiques = await Boutique.find()
+            .populate("responsable_id", "name email")
+            .sort({ name: 1 });
+
+        return c.json({
+            success: true,
+            data: boutiques
         });
     } catch (error) {
         const err = error as Error;
@@ -185,101 +274,5 @@ export const getVenteById = async (c: Context) => {
     }
 };
 
-// ➤ Récupérer les statistiques de vente
-export const getStatistiquesVentes = async (c: Context) => {
-    try {
-        const { periode = "jour" } = c.req.query();
-
-        let groupFormat: any;
-        const maintenant = new Date();
-
-        // Définir la période en fonction du paramètre
-        switch (periode) {
-            case "jour":
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" },
-                    day: { $dayOfMonth: "$date" }
-                };
-                break;
-            case "mois":
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" }
-                };
-                break;
-            case "annee":
-                groupFormat = {
-                    year: { $year: "$date" }
-                };
-                break;
-            default:
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" },
-                    day: { $dayOfMonth: "$date" }
-                };
-        }
-
-        // Agrégation pour les statistiques
-        const stats = await Vente.aggregate([
-            {
-                $group: {
-                    _id: groupFormat,
-                    totalVentes: { $sum: 1 },
-                    montantTotal: { $sum: "$totalAmount" },
-                    articlesVendus: { $sum: { $sum: "$items.quantity" } },
-                    moyennePanier: { $avg: "$totalAmount" },
-                    ventes: { $push: "$$ROOT" }
-                }
-            },
-            { $sort: { "_id.year": -1, "_id.month": -1, "_id.day": -1 } }
-        ]);
-
-        // Statistiques globales
-        const globalStats = await Vente.aggregate([
-            {
-                $group: {
-                    _id: null,
-                    totalVentes: { $sum: 1 },
-                    montantTotal: { $sum: "$totalAmount" },
-                    articlesVendus: { $sum: { $sum: "$items.quantity" } },
-                    moyennePanier: { $avg: "$totalAmount" }
-                }
-            }
-        ]);
-
-        // Produits les plus vendus
-        const topProduits = await Vente.aggregate([
-            { $unwind: "$items" },
-            {
-                $group: {
-                    _id: {
-                        productId: "$items.productId",
-                        variantName: "$items.variantName"
-                    },
-                    productName: { $first: "$items.productName" },
-                    quantiteVendue: { $sum: "$items.quantity" },
-                    montantTotal: { $sum: "$items.total" }
-                }
-            },
-            { $sort: { quantiteVendue: -1 } },
-            { $limit: 10 }
-        ]);
-
-        return c.json({
-            success: true,
-            data: {
-                periode,
-                statistiques: stats,
-                global: globalStats[0] || {},
-                topProduits
-            }
-        });
-    } catch (error) {
-        const err = error as Error;
-        return c.json({ error: err.message }, 500);
-    }
-};
 
 
