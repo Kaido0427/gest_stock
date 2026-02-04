@@ -8,27 +8,24 @@ import {
   X,
 } from "lucide-react";
 import LogoutButton from "./LogoutButton";
-
-const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
+const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, role }) => {
   const menuItems = [
-    { id: "dashboard", label: "Tableau de bord", icon: Home },
-    { id: "sales", label: "Ventes / Caisse", icon: ShoppingCart },
-    { id: "products", label: "Produits", icon: Package },
-    { id: "reports", label: "Rapports", icon: FileText },
-    { id: "settings", label: "Paramètres", icon: Settings },
+    { id: "dashboard", label: "Tableau de bord", icon: Home, roles: ["admin"] },
+    { id: "sales", label: "Ventes", icon: ShoppingCart, roles: ["admin", "employe"] },
+    { id: "products", label: "Produits", icon: Package, roles: ["admin"] },
+    { id: "reports", label: "Rapports", icon: FileText, roles: ["admin"] },
+    { id: "settings", label: "Paramètres", icon: Settings, roles: ["admin"] },
   ];
+
+  const filteredMenu = menuItems.filter((item) => item.roles.includes(role));
 
   const handleNavigation = (id) => {
     onPageChange(id);
-    // Ferme la sidebar sur mobile après navigation
-    if (window.innerWidth < 1024) {
-      onClose();
-    }
+    if (window.innerWidth < 1024) onClose();
   };
 
   return (
     <>
-      {/* Overlay sombre sur mobile */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
@@ -36,13 +33,11 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
         />
       )}
 
-      {/* Sidebar */}
       <div
         className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-lg flex flex-col h-full transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        {/* Header */}
         <div className="p-4 sm:p-6 border-b flex items-center justify-between">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-blue-600">
@@ -50,7 +45,6 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
             </h1>
             <p className="text-xs sm:text-sm text-gray-500">Gestion complète</p>
           </div>
-          {/* Bouton fermer visible uniquement sur mobile */}
           <button
             onClick={onClose}
             className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -60,9 +54,8 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Navigation */}
         <nav className="p-4 space-y-2 flex-1 overflow-y-auto">
-          {menuItems.map((item) => {
+          {filteredMenu.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -81,7 +74,6 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
           })}
         </nav>
 
-        {/* Bouton de déconnexion en bas */}
         <div className="p-4 border-t">
           <LogoutButton onLogout={onLogout} />
         </div>
@@ -91,4 +83,3 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose }) => {
 };
 
 export default Sidebar;
-

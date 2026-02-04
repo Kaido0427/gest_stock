@@ -1,19 +1,27 @@
+// LoginPage.jsx - MODIFIÉ
 import React, { useState } from "react";
-import { login } from "../services/auth";
 
 const LoginPage = ({ onLogin }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const res = await login(email, password);
-    if (res.error) {
-      setError(res.error);
-    } else {
-      localStorage.setItem("token", res.token); // on stocke le token
-      onLogin(); // callback pour indiquer que l'utilisateur est connecté
+
+    if (loading) return; // Éviter double soumission
+
+    setLoading(true);
+    setError("");
+
+    // ✅ Appeler onLogin du parent qui gère tout
+    const result = await onLogin(email, password);
+
+    setLoading(false);
+
+    if (result?.error) {
+      setError(result.error);
     }
   };
 
@@ -32,6 +40,7 @@ const LoginPage = ({ onLogin }) => {
           onChange={(e) => setEmail(e.target.value)}
           className="w-full p-2 mb-4 border rounded"
           required
+          disabled={loading}
         />
         <input
           type="password"
@@ -40,12 +49,14 @@ const LoginPage = ({ onLogin }) => {
           onChange={(e) => setPassword(e.target.value)}
           className="w-full p-2 mb-4 border rounded"
           required
+          disabled={loading}
         />
         <button
           type="submit"
           className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          disabled={loading}
         >
-          Se connecter
+          {loading ? "Connexion..." : "Se connecter"}
         </button>
       </form>
     </div>

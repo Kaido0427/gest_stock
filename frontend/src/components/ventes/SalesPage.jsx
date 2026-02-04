@@ -9,7 +9,7 @@ import { vendreProduit } from "../../services/sale";
 import VariantSelector from "../../components/ventes/VariantSelector";
 import CartItem from "../../components/ventes/CartItem";
 
-const SalesPage = ({ products }) => {
+const SalesPage = ({ products,onRefreshProducts }) => {
   // États
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tous");
@@ -150,6 +150,9 @@ const handleCheckout = async () => {
 
     alert(`✅ Vente validée avec succès !\n\nArticles vendus: ${itemsCount}\nMontant total: ${totalAmount.toLocaleString()} FCFA\n\nLes stocks ont été mis à jour.`);
     setCart([]);
+     if (onRefreshProducts) {
+      await onRefreshProducts();
+    }
   } catch (error) {
     // affichage plus utile — montre le message précis
     console.error("[Checkout] erreur complète:", error);

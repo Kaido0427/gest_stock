@@ -2,7 +2,6 @@
 import jwt from "jsonwebtoken";
 
 export function generateToken(userId: string) {
-  // Vérifiez explicitement la présence du secret
   const secret = process.env.JWT_SECRET;
   
   if (!secret || secret === '') {
@@ -10,7 +9,7 @@ export function generateToken(userId: string) {
     throw new Error('JWT_SECRET manquant. Vérifiez votre fichier .env');
   }
   
-  return jwt.sign({ id: userId }, secret, {
+  return jwt.sign({ userId }, secret, { // ← Change "id" en "userId"
     expiresIn: "7d",
   });
 }

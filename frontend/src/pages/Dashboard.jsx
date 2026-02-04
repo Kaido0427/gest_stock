@@ -8,6 +8,7 @@ import ReportsPage from "../components/ReportsPage";
 import SettingsPage from "../components/SettingsPage";
 import Login from "./Login";
 import { getProduits } from "../services/product";
+import { getCurrentUser } from "../services/auth";
 
 const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -15,6 +16,8 @@ const Dashboard = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [user, setUser] = useState(null);
 
   // États pour les données
   const [products, setProducts] = useState([]);
@@ -42,14 +45,40 @@ const Dashboard = () => {
     }
   };
 
-  // Charger les produits au montage du composant
+  // Charger les produits et l'utilisateur au montage du composant
   useEffect(() => {
-    loadProducts();
+    const init = async () => {
+      await loadProducts();
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
+          setIsLoggedIn(true);
+        } else {
+          setIsLoggedIn(false);
+        }
+      } catch (err) {
+        console.error("Erreur récupération utilisateur:", err);
+        setIsLoggedIn(false);
+      }
+    };
+    init();
   }, []);
 
+  // Rafraîchir les produits toutes les 30 secondes si on est sur la page produits ou ventes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (currentPage === "products" || currentPage === "sales") {
+        loadProducts();
+      }
+    }, 30000); // 30 secondes
+
+    return () => clearInterval(interval);
+  }, [currentPage]);
+
   // Fonction pour rafraîchir les produits (à passer aux composants enfants)
-  const handleRefreshProducts = () => {
-    loadProducts();
+  const handleRefreshProducts = async () => {
+    await loadProducts(); // ← Ajoute async/await
   };
 
   const handleLogout = () => {
@@ -60,32 +89,32 @@ const Dashboard = () => {
   // Gestion des pages avec les données mises à jour
   const pages = {
     dashboard: (
-      <DashboardPage 
-        products={products} 
-        sales={sales} 
-        stats={stats} 
+      <DashboardPage
+        products={products}
+        sales={sales}
+        stats={stats}
         onRefreshProducts={handleRefreshProducts}
       />
     ),
     sales: (
-      <SalesPage 
-        products={products} 
-        cart={cart} 
+      <SalesPage
+        products={products}
+        cart={cart}
         setCart={setCart}
         onRefreshProducts={handleRefreshProducts}
       />
     ),
     products: (
-      <ProductsPage 
-        products={products} 
+      <ProductsPage
+        products={products}
         onRefresh={handleRefreshProducts}
         loading={loading}
       />
     ),
     reports: (
-      <ReportsPage 
-        stats={stats} 
-        products={products} 
+      <ReportsPage
+        stats={stats}
+        products={products}
         sales={sales}
       />
     ),
@@ -104,6 +133,7 @@ const Dashboard = () => {
         onLogout={handleLogout}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        role={user?.role || "employe"} // rôle pour filtrer les menus
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">

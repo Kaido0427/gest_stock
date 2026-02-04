@@ -360,7 +360,9 @@ const ProductsPage = ({ products, onRefresh }) => {
         isOpen={isProductModalOpen}
         onClose={() => {
           setProductModalOpen(false);
+           setActiveProduct(null);
           onRefresh?.();
+          
         }}
         product={activeProduct}
       />
@@ -370,6 +372,7 @@ const ProductsPage = ({ products, onRefresh }) => {
         isOpen={isApprovisionnementModalOpen}
         onClose={() => {
           setApprovisionnementModalOpen(false);
+           setActiveProduct(null);
           onRefresh?.();
         }}
         product={activeProduct}
@@ -378,8 +381,10 @@ const ProductsPage = ({ products, onRefresh }) => {
       {/* MODAL : DÉTAILS DU PRODUIT */}
       <ProductDetailModal
         isOpen={isDetailModalOpen}
-        onClose={() => setDetailModalModal(false)}
+        onClose={() => setDetailModalOpen(false)}
         product={activeProduct}
+        
+        
       />
     </div>
   );

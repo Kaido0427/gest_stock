@@ -1,22 +1,31 @@
-//../backend/src/routes/auth.route.ts
+// backend/src/routes/auth.route.ts
+// backend/src/routes/auth.route.ts
 import { Hono } from "hono";
 import { AuthController } from "../controllers/auth.controller.js";
-import { deleteCookie } from "hono/cookie";
+
+
+console.log("🟢 [AUTH ROUTE] AuthController:", AuthController);
+console.log("🟢 [AUTH ROUTE] AuthController.getMe:", AuthController.getMe);
+console.log("🟢 [AUTH ROUTE] AuthController.register:", AuthController.register);
+console.log("🟢 [AUTH ROUTE] AuthController.login:", AuthController.login);
+console.log("🟢 [AUTH ROUTE] AuthController.logout:", AuthController.logout);
 
 export const authRoutes = new Hono();
 
-authRoutes.post("/register", (c) => AuthController.register(c));
-authRoutes.post("/login", (c) => AuthController.login(c));
-authRoutes.post("/logout", async (c) => {
-  console.log("🔒 Déconnexion demandée");
-  
-  // Récupère le token depuis l'en-tête Authorization
-  const authHeader = c.req.header("Authorization");
-  const token = authHeader?.replace("Bearer ", "");
-  
-  if (!token) {
-    return c.json({ error: "Token manquant" }, 401);
-  }
-  
-  return c.json({ message: "Déconnexion réussie" });
-});
+console.log("🟢 [AUTH ROUTE] authRoutes instance:", authRoutes);
+console.log("🟢 [AUTH ROUTE] authRoutes.get:", typeof authRoutes.get);
+console.log("🟢 [AUTH ROUTE] authRoutes.post:", typeof authRoutes.post);
+
+authRoutes.get("/me", AuthController.getMe);
+console.log("🟢 [AUTH ROUTE] Après enregistrement GET /me");
+
+authRoutes.post("/register", AuthController.register);
+console.log("🟢 [AUTH ROUTE] Après enregistrement POST /register");
+
+authRoutes.post("/login", AuthController.login);
+console.log("🟢 [AUTH ROUTE] Après enregistrement POST /login");
+
+authRoutes.post("/logout", AuthController.logout);
+console.log("🟢 [AUTH ROUTE] Après enregistrement POST /logout");
+
+console.log("✅ [AUTH ROUTE] authRoutes final:", authRoutes);
