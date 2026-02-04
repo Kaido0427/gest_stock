@@ -1,5 +1,5 @@
 // services/sale.js
-const API_URL = "http://localhost:3000";
+const API_URL = "https://api.mahoutondji.online";
 
 // ➤ Vendre une variante spécifique
 export async function vendreProduit(produitId, variantId, quantity) {

@@ -1,5 +1,5 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: 'http://localhost:3000', // ton backend Hono
+  baseURL: 'https://api.mahoutondji.online', // ton backend Hono
 });
