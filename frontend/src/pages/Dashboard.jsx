@@ -74,7 +74,7 @@ const Dashboard = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    setIsLoggedIn(false);
+    setIsLoggedIn(false); 
   };
 
   // Gestion des pages avec les données mises à jour
