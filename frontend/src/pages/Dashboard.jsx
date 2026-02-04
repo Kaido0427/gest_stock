@@ -65,16 +65,7 @@ const Dashboard = () => {
     init();
   }, []);
 
-  // Rafraîchir les produits toutes les 30 secondes si on est sur la page produits ou ventes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (currentPage === "products" || currentPage === "sales") {
-        loadProducts();
-      }
-    }, 30000); // 30 secondes
-
-    return () => clearInterval(interval);
-  }, [currentPage]);
+ 
 
   // Fonction pour rafraîchir les produits (à passer aux composants enfants)
   const handleRefreshProducts = async () => {
