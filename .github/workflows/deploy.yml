@@ -23,7 +23,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy files to VPS 
+      - name: Deploy files to VPS
         run: |
           rsync -avz --delete \
             --exclude='.git' \
@@ -34,11 +34,11 @@ jobs:
             --exclude='frontend/.env' \
             --chmod=D755,F644 \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            ./ "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}":/var/www/gest_stock || [ $? -eq 23 ] && echo "⚠️ Transfert terminé avec avertissements" || exit $?
+            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/gest_stock || [ $? -eq 23 ] && echo "⚠️ Transfert terminé" || exit $?
 
       - name: Run post-deployment commands
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${{ secrets.VPS_USER }}"@"${{ secrets.VPS_HOST }}" << 'ENDSSH'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
             set -e
             cd /var/www/gest_stock
             npm install
