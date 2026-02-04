@@ -1,4 +1,4 @@
-const BASE_URL = "https://api.mahoutodjii.online/";
+const BASE_URL = "https://api.mahoutodji.online/";
 
 // Récupérer toutes les boutiques
 export const getAllBoutiques = async () => {
