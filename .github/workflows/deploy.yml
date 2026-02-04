@@ -1,0 +1,37 @@
+# .github/workflows/deploy.yml
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/gest_stock
+            
+            # Pull latest code
+            git pull origin main || git clone git@github.com:VOTRE_USER/VOTRE_REPO.git .
+            
+            # Install dependencies
+            npm ci
+            
+            # Build
+            npm run build --workspace=backend
+            npm run build --workspace=frontend
+            
+            # Restart backend with PM2
+            cd backend
+            pm2 delete gest_stock-backend || true
+            pm2 start npm --name "gest_stock-backend" -- start
+            pm2 save
