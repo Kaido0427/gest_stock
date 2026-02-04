@@ -12,26 +12,26 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
           script: |
-            cd /var/www/gest_stock
+            cd /var/www/gest_stock || mkdir -p /var/www/gest_stock && cd /var/www/gest_stock
             
-            # Pull latest code
-            git pull origin main || git clone git@github.com:VOTRE_USER/VOTRE_REPO.git .
+            if [ ! -d ".git" ]; then
+              git clone https://github.com/Kaido0427/gest_stock.git .
+            else
+              git pull origin main
+            fi
             
-            # Install dependencies
             npm ci
-            
-            # Build
             npm run build --workspace=backend
             npm run build --workspace=frontend
             
-            # Restart backend with PM2
             cd backend
-            pm2 delete gest_stock-backend || true
+            pm2 delete gest_stock-backend 2>/dev/null || true
             pm2 start npm --name "gest_stock-backend" -- start
             pm2 save
