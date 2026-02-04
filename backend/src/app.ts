@@ -25,7 +25,7 @@ app.route('/boutiques', boutiqueRouter);
 app.get('/', (c) => {
   return c.json({
     status: 'OK',
-    message: 'GestStock API is running wesh'
+    message: 'GestStock API is running'
   });
 });
 
