@@ -10,16 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
+      
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            cd /var/www/gest_stock || mkdir -p /var/www/gest_stock && cd /var/www/gest_stock
+            mkdir -p /var/www/gest_stock
+            cd /var/www/gest_stock
             
             if [ ! -d ".git" ]; then
               git clone https://github.com/Kaido0427/gest_stock.git .
@@ -28,10 +29,10 @@ jobs:
             fi
             
             npm ci
-            npm run build --workspace=backend
-            npm run build --workspace=frontend
             
-            cd backend
-            pm2 delete gest_stock-backend 2>/dev/null || true
-            pm2 start npm --name "gest_stock-backend" -- start
+            pm2 delete all 2>/dev/null || true
+            cd /var/www/gest_stock/backend
+            pm2 start npm --name "backend" -- run dev
+            cd /var/www/gest_stock/frontend
+            pm2 start npm --name "frontend" -- run dev
             pm2 save
