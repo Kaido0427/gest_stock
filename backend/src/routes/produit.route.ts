@@ -25,7 +25,7 @@ produitRoutes.delete('/:id', deleteProduit);
 
 produitRoutes.post('/:id/vendre', vendreProduit);
 produitRoutes.get('/produitByBoutique/:boutiqueId', getProduitsByBoutique);
-produitRoutes.post("/products/transfert-stock", transfertStockBoutiques);
+produitRoutes.post("/transfert-stock", transfertStockBoutiques);
 
 
 

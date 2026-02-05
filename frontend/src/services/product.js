@@ -107,7 +107,7 @@ export const approvisionnerProduit = async (productId, data) => {
 // ✅ Transfert de stock entre boutiques
 export const transfertStockBoutiques = async (data) => {
   try {
-    const res = await fetch(`${API_URL}/products/transfert-stock`, {
+    const res = await fetch(`${API_URL}/transfert-stock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
