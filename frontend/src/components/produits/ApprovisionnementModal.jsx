@@ -65,32 +65,44 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
     let res;
 
     if (modeAppro === "direct") {
-      // Approvisionnement direct
+      // ✅ Approvisionnement direct
+      console.log("📦 Approvisionnement direct:", {
+        productId: product._id,
+        quantity: form.quantity,
+        unit: form.unit,
+      });
+
       res = await approvisionnerProduit(product._id, {
         quantity: form.quantity,
         unit: form.unit,
       });
     } else {
-      // Transfert entre boutiques
+      // ✅ Transfert entre boutiques
       if (!form.boutiqueSrcId) {
         alert("Veuillez sélectionner la boutique source");
         setLoading(false);
         return;
       }
 
-      res = await transfertStockBoutiques({
-        produitId: product._id,
-        boutiqueSrcId: form.boutiqueSrcId,
-        boutiqueDestId: product.boutique_id._id || product.boutique_id,
+      // ⚠️ CORRECTION : On doit trouver le produit dans la boutique SOURCE
+      // Le backend cherche le produit par son nom dans la boutique source
+      const transferData = {
+        produitId: product._id, // ID du produit (pour identifier quel produit)
+        boutiqueSrcId: form.boutiqueSrcId, // Boutique d'où on retire le stock
+        boutiqueDestId: product.boutique_id._id || product.boutique_id, // Boutique où on ajoute le stock
         quantity: form.quantity,
         unit: form.unit,
-      });
+      };
+
+      console.log("🔄 Transfert entre boutiques:", transferData);
+
+      res = await transfertStockBoutiques(transferData);
     }
 
     setLoading(false);
 
     if (res.error) {
-      alert(res.error);
+      alert(`Erreur: ${res.error}`);
     } else {
       alert(
         modeAppro === "direct"
@@ -158,10 +170,11 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
             <button
               type="button"
               onClick={() => setModeAppro("direct")}
-              className={`p-4 rounded-lg border-2 transition-all ${modeAppro === "direct"
+              className={`p-4 rounded-lg border-2 transition-all ${
+                modeAppro === "direct"
                   ? "border-green-500 bg-green-50"
                   : "border-gray-200 hover:border-gray-300"
-                }`}
+              }`}
             >
               <Package className="w-6 h-6 mx-auto mb-2 text-green-600" />
               <div className="font-medium text-gray-800">
@@ -175,10 +188,11 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
             <button
               type="button"
               onClick={() => setModeAppro("transfert")}
-              className={`p-4 rounded-lg border-2 transition-all ${modeAppro === "transfert"
+              className={`p-4 rounded-lg border-2 transition-all ${
+                modeAppro === "transfert"
                   ? "border-blue-500 bg-blue-50"
                   : "border-gray-200 hover:border-gray-300"
-                }`}
+              }`}
             >
               <ArrowRight className="w-6 h-6 mx-auto mb-2 text-blue-600" />
               <div className="font-medium text-gray-800">
@@ -272,7 +286,7 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
                 onChange={handleChange}
                 min="0.01"
                 step="0.01"
-                placeholder="Ex: 50"
+                placeholder="Ex: 100"
                 className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-green-500"
                 required
                 disabled={loading}
@@ -364,10 +378,11 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
             </button>
             <button
               type="submit"
-              className={`px-5 py-2 rounded-lg text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${modeAppro === "direct"
+              className={`px-5 py-2 rounded-lg text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                modeAppro === "direct"
                   ? "bg-green-600 hover:bg-green-700"
                   : "bg-blue-600 hover:bg-blue-700"
-                }`}
+              }`}
               disabled={
                 loading ||
                 form.quantity <= 0 ||

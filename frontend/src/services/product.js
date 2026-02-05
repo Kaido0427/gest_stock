@@ -83,6 +83,12 @@ export const approvisionnerProduit = async (productId, data) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      return { error: errorData.error || `Erreur HTTP: ${res.status}` };
+    }
+    
     return await res.json();
   } catch (error) {
     console.error("Erreur approvisionnerProduit:", error);
@@ -93,11 +99,17 @@ export const approvisionnerProduit = async (productId, data) => {
 // ✅ Transfert de stock entre boutiques
 export const transfertStockBoutiques = async (data) => {
   try {
-    const res = await fetch(`${API_URL}/transfert-stock`, { // ✅ Corrigé
+    const res = await fetch(`${API_URL}/transfert-stock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+    
+    if (!res.ok) {
+      const errorData = await res.json();
+      return { error: errorData.error || `Erreur HTTP: ${res.status}` };
+    }
+    
     return await res.json();
   } catch (error) {
     console.error("Erreur transfertStockBoutiques:", error);

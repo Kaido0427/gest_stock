@@ -148,29 +148,43 @@ export const deleteProduit = async (c: Context) => {
 };
 // ➤ 6. APPROVISIONNER un produit (ajouter au stock)
 export const approvisionnerProduit = async (c: Context) => {
+    console.group("📦 [BACKEND] approvisionnerProduit");
     try {
         const id = c.req.param("id");
         const { quantity, unit } = await c.req.json();
 
+        console.log("➡ Requête reçue:", { id, quantity, unit });
+
         // Validation
         if (!quantity || quantity <= 0) {
+            console.warn("❌ Quantité invalide");
             return c.json({ error: "Quantité invalide" }, 400);
         }
 
         const produit = await Produit.findById(id);
-        if (!produit) return c.json({ error: "Produit introuvable" }, 404);
+        if (!produit) {
+            console.warn("❌ Produit introuvable:", id);
+            return c.json({ error: "Produit introuvable" }, 404);
+        }
+
+        console.log("✅ Produit trouvé:", produit.name);
 
         // Si l'unité fournie est différente de l'unité de base, convertir
         let quantityToAdd = quantity;
         if (unit && unit !== produit.unit) {
             quantityToAdd = convertUnit(quantity, unit, produit.unit);
+            console.log(`🔄 Conversion: ${quantity} ${unit} → ${quantityToAdd} ${produit.unit}`);
         }
 
         const oldStock = produit.stock;
         produit.stock += quantityToAdd;
         await produit.save();
 
+        console.log(`✅ Stock mis à jour: ${oldStock} → ${produit.stock}`);
+        console.log("🎉 Approvisionnement réussi");
+
         return c.json({
+            success: true,
             message: "Approvisionnement effectué",
             produit: {
                 id: produit._id,
@@ -183,9 +197,13 @@ export const approvisionnerProduit = async (c: Context) => {
         });
     } catch (error) {
         const err = error as Error;
+        console.error("🔥 Erreur approvisionnerProduit:", err);
         return c.json({ error: err.message }, 500);
+    } finally {
+        console.groupEnd();
     }
 };
+
 // ➤ 8. TRANSFERT DE STOCK ENTRE BOUTIQUES
 export const transfertStockBoutiques = async (c: Context) => {
     console.group("🔄 [BACKEND] transfertStockBoutiques");
@@ -196,31 +214,42 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         // Validation
         if (!produitId || !boutiqueSrcId || !boutiqueDestId || !quantity || quantity <= 0) {
+            console.warn("❌ Données invalides");
             return c.json({ error: "Données invalides" }, 400);
         }
 
         if (boutiqueSrcId === boutiqueDestId) {
+            console.warn("❌ Source et destination identiques");
             return c.json({ error: "La boutique source et destination doivent être différentes" }, 400);
         }
 
-        // ✅ Trouver le produit dans la boutique source par _id ET boutique_id
+        // ✅ D'abord, trouver le produit dans la boutique DESTINATION pour avoir son nom
+        const produitDest = await Produit.findOne({
+            _id: produitId,
+            boutique_id: boutiqueDestId
+        });
+
+        if (!produitDest) {
+            console.warn("❌ Produit introuvable dans la boutique destination:", { produitId, boutiqueDestId });
+            return c.json({ error: "Produit introuvable dans la boutique de destination" }, 404);
+        }
+
+        console.log("✅ Produit destination trouvé:", produitDest.name);
+
+        // ✅ Maintenant, chercher le même produit (par nom) dans la boutique SOURCE
         const produitSrc = await Produit.findOne({
-            _id: produitId,              // ✅ Chercher par _id MongoDB
+            name: produitDest.name,
             boutique_id: boutiqueSrcId
         });
 
         if (!produitSrc) {
-            console.warn("❌ Produit introuvable:", { produitId, boutiqueSrcId });
-            return c.json({ error: "Produit introuvable dans la boutique source" }, 404);
+            console.warn("❌ Produit introuvable dans la boutique source:", { nom: produitDest.name, boutiqueSrcId });
+            return c.json({ 
+                error: `Le produit "${produitDest.name}" n'existe pas dans la boutique source sélectionnée` 
+            }, 404);
         }
 
         console.log("✅ Produit source trouvé:", produitSrc.name);
-
-        // Trouver le produit dans la boutique destination (par nom de produit)
-        let produitDest = await Produit.findOne({
-            name: produitSrc.name,
-            boutique_id: boutiqueDestId
-        });
 
         // Convertir la quantité en unité de base si nécessaire
         const unitToUse = unit || produitSrc.unit;
@@ -228,12 +257,14 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         if (unitToUse !== produitSrc.unit) {
             quantityToTransfer = convertUnit(quantity, unitToUse, produitSrc.unit);
+            console.log(`🔄 Conversion: ${quantity} ${unitToUse} → ${quantityToTransfer} ${produitSrc.unit}`);
         }
 
         console.log("📦 Quantité à transférer:", quantityToTransfer, produitSrc.unit);
 
         // Vérifier le stock de la boutique source
         if (produitSrc.stock < quantityToTransfer) {
+            console.warn("❌ Stock insuffisant:", produitSrc.stock, "<", quantityToTransfer);
             return c.json({
                 error: `Stock insuffisant dans la boutique source. Stock disponible: ${produitSrc.stock} ${produitSrc.unit}`
             }, 400);
@@ -246,28 +277,12 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         console.log("✅ Stock source mis à jour:", oldStockSrc, "→", produitSrc.stock);
 
-        // Si le produit n'existe pas dans la destination, le créer
-        if (!produitDest) {
-            produitDest = await Produit.create({
-                name: produitSrc.name,
-                description: produitSrc.description,
-                category: produitSrc.category,
-                stock: quantityToTransfer,
-                unit: produitSrc.unit,
-                basePrice: produitSrc.basePrice,
-                boutique_id: boutiqueDestId
-            });
+        // Ajouter au stock destination
+        const oldStockDest = produitDest.stock;
+        produitDest.stock += quantityToTransfer;
+        await produitDest.save();
 
-            console.log("✅ Produit créé dans la boutique destination");
-        } else {
-            // Ajouter au stock destination
-            const oldStockDest = produitDest.stock;
-            produitDest.stock += quantityToTransfer;
-            await produitDest.save();
-
-            console.log("✅ Stock destination mis à jour:", oldStockDest, "→", produitDest.stock);
-        }
-
+        console.log("✅ Stock destination mis à jour:", oldStockDest, "→", produitDest.stock);
         console.log("🎉 Transfert terminé avec succès");
 
         return c.json({
@@ -284,6 +299,7 @@ export const transfertStockBoutiques = async (c: Context) => {
                 destination: {
                     boutique_id: boutiqueDestId,
                     produit_id: produitDest._id,
+                    oldStock: oldStockDest,
                     newStock: produitDest.stock,
                     quantityReceived: quantityToTransfer
                 }
