@@ -7,42 +7,37 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
       - name: Deploy files to VPS
         run: |
-          rsync -avz --delete \
+          sshpass -p "${{ secrets.VPS_PASSWORD }}" rsync -avz --delete \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='node_modules' \
             --exclude='.env' \
             --exclude='backend/.env' \
             --exclude='frontend/.env' \
-            --chmod=D755,F644 \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/gest_stock || [ $? -eq 23 ] && echo "⚠️ Transfert terminé" || exit $?
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/gest_stock
 
       - name: Run post-deployment commands
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
+          ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
             set -e
             cd /var/www/gest_stock
             npm install
-            pm2 restart all || (cd backend && pm2 start npm --name "backend" -- run dev && cd ../frontend && pm2 start npm --name "frontend" -- run dev)
+            pm2 restart all || (
+              cd backend && pm2 start npm --name backend -- run dev &&
+              cd ../frontend && pm2 start npm --name frontend -- run dev
+            )
             pm2 save
             echo "✅ Déploiement terminé"
           ENDSSH
