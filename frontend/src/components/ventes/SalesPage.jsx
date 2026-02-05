@@ -1,16 +1,18 @@
 // pages/SalesPage.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search, Package, ShoppingCart,
   Receipt, Plus, Minus, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { vendreProduit } from "../../services/sale";
+import { getCurrentUser } from "../../services/auth";
 import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
 
 const SalesPage = ({ products, onRefreshProducts }) => {
   // États
+  const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tous");
   const [cart, setCart] = useState([]);
@@ -20,11 +22,39 @@ const SalesPage = ({ products, onRefreshProducts }) => {
   const [customPrice, setCustomPrice] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Catégories uniques
-  const categories = ["Tous", ...new Set(products.map(p => p.category).filter(Boolean))];
+  // Charger l'utilisateur
+  useEffect(() => {
+    const loadUser = async () => {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+    };
+    loadUser();
+  }, []);
 
-  // Produits filtrés
-  const filteredProducts = products.filter(product => {
+  // Filtrer les produits selon le rôle de l'utilisateur
+  const getFilteredProductsByUser = () => {
+    if (!user) return products;
+
+    if (user.role === "employe" && user.boutique) {
+      // Employé : uniquement les produits de sa boutique
+      return products.filter(p => 
+        p.boutique_id?._id === user.boutique.id || 
+        p.boutique_id === user.boutique.id
+      );
+    }
+
+    // Admin : tous les produits
+    return products;
+  };
+
+  // Produits filtrés par utilisateur d'abord
+  const userProducts = getFilteredProductsByUser();
+
+  // Catégories basées sur les produits de l'utilisateur
+  const categories = ["Tous", ...new Set(userProducts.map(p => p.category).filter(Boolean))];
+
+  // Produits filtrés par recherche et catégorie
+  const filteredProducts = userProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "Tous" || product.category === selectedCategory;
     const hasStock = product.stock > 0;
@@ -52,7 +82,6 @@ const SalesPage = ({ products, onRefreshProducts }) => {
       return parseFloat(customPrice);
     }
 
-    // Conversion simplifiée pour estimation (le backend fera la conversion exacte)
     const unitToUse = selectedUnit || selectedProduct.unit;
     return selectedProduct.basePrice * quantity;
   };
@@ -64,8 +93,16 @@ const SalesPage = ({ products, onRefreshProducts }) => {
       return;
     }
 
+    // Vérifier si la conversion est possible
+    const canConvert = ["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit);
+    const unitToSell = canConvert ? (selectedUnit || selectedProduct.unit) : selectedProduct.unit;
+
+    if (!canConvert && selectedUnit !== selectedProduct.unit) {
+      alert(`Ce produit ne peut être vendu que en ${selectedProduct.unit}`);
+      return;
+    }
+
     const estimatedPrice = calculateEstimatedPrice();
-    const unitToSell = selectedUnit || selectedProduct.unit;
 
     const cartItem = {
       id: `${selectedProduct._id}-${Date.now()}`,
@@ -85,12 +122,12 @@ const SalesPage = ({ products, onRefreshProducts }) => {
     // Réinitialiser
     setQuantity(1);
     setCustomPrice("");
-    setSelectedUnit("");
+    setSelectedUnit(selectedProduct.unit);
   };
 
   // Mettre à jour la quantité d'un item
   const handleUpdateQuantity = (itemId, newQuantity) => {
-    if (newQuantity < 1) return;
+    if (newQuantity < 0.5) return;
 
     setCart(cart.map(item => {
       if (item.id === itemId) {
@@ -126,29 +163,19 @@ const SalesPage = ({ products, onRefreshProducts }) => {
     setLoading(true);
 
     try {
-      // Envoyer chaque vente
       for (const item of cart) {
-        console.log("[Checkout] vendreProduit ->", {
-          productId: item.productId,
-          quantity: item.quantity,
-          unit: item.unit,
-          customPrice: item.customPrice
-        });
         const result = await vendreProduit(
           item.productId,
-          parseFloat(item.quantity), // ✅ Forcer en nombre
+          parseFloat(item.quantity),
           item.unit,
-          item.customPrice ? parseFloat(item.customPrice) : null // ✅ Aussi ici
+          item.customPrice ? parseFloat(item.customPrice) : null
         );
-
-        console.log("[Checkout] result vendreProduit:", result);
 
         if (result && result.error) {
           throw new Error(result.error || "Erreur inconnue serveur");
         }
       }
 
-      // Récapitulatif
       const totalAmount = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
       const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -213,10 +240,11 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === category
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
+                    className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${
+                      selectedCategory === category
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                   >
                     {category}
                   </button>
@@ -250,6 +278,7 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                         setSelectedUnit(product.unit);
                         setCustomPrice("");
                       }}
+                      showBoutique={user?.role === "admin"}
                     />
                   ))}
                 </AnimatePresence>
@@ -323,7 +352,6 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                   </div>
                 </div>
 
-                {/* BOUTON VALIDER */}
                 <button
                   onClick={handleCheckout}
                   disabled={loading || cart.length === 0}
@@ -370,6 +398,12 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                   <div className="text-xs text-gray-500 mt-1">
                     Prix: {selectedProduct.basePrice.toLocaleString()} FCFA / {selectedProduct.unit}
                   </div>
+                  {user?.role === "admin" && selectedProduct.boutique_id?.name && (
+                    <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                      <Package className="w-3 h-3" />
+                      {selectedProduct.boutique_id.name}
+                    </div>
+                  )}
                 </div>
 
                 {/* Sélection de l'unité */}
@@ -381,6 +415,7 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                     value={selectedUnit}
                     onChange={(e) => setSelectedUnit(e.target.value)}
                     className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    disabled={!["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit)}
                   >
                     {getAvailableUnits(selectedProduct.unit).map(unit => (
                       <option key={unit} value={unit}>
@@ -388,6 +423,11 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                       </option>
                     ))}
                   </select>
+                  {!["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit) && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠ Ce produit ne peut être vendu que dans son unité de base
+                    </p>
+                  )}
                 </div>
 
                 {/* Quantité */}
@@ -399,10 +439,11 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                     <button
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
                       disabled={quantity <= 1}
-                      className={`p-2 rounded-lg ${quantity <= 1
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
+                      className={`p-2 rounded-lg ${
+                        quantity <= 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
                     >
                       <Minus className="w-4 h-4" />
                     </button>
