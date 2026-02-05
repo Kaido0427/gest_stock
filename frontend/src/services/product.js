@@ -1,7 +1,7 @@
 // frontend/src/services/product.js
 const API_URL = "https://api.mahoutodji.online/produit";
 
-// ➤ 1. Créer un produit avec variantes
+// ➤ 1. Créer un produit
 export async function addProduit(produit) {
   try {
     const res = await fetch(`${API_URL}`, {
@@ -11,10 +11,8 @@ export async function addProduit(produit) {
       },
       body: JSON.stringify(produit),
     });
-
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Erreur lors de la création" };
-
     return data;
   } catch (err) {
     return { error: "Serveur injoignable" };
@@ -26,9 +24,7 @@ export async function getProduits() {
   try {
     const res = await fetch(`${API_URL}`);
     const data = await res.json();
-
     if (!res.ok) return { error: data.error || "Erreur récupération produits" };
-
     return data;
   } catch (err) {
     return { error: "Serveur injoignable" };
@@ -40,7 +36,6 @@ export async function getProduit(id) {
   try {
     const res = await fetch(`${API_URL}/${id}`);
     const data = await res.json();
-
     if (!res.ok) return { error: data.error || "Produit introuvable" };
     return data;
   } catch (err) {
@@ -58,10 +53,8 @@ export async function updateProduit(id, updates) {
       },
       body: JSON.stringify(updates),
     });
-
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Erreur modification produit" };
-
     return data;
   } catch (err) {
     return { error: "Serveur injoignable" };
@@ -74,29 +67,22 @@ export async function deleteProduit(id) {
     const res = await fetch(`${API_URL}/${id}`, {
       method: "DELETE",
     });
-
     const data = await res.json();
     if (!res.ok) return { error: data.error || "Erreur suppression produit" };
-
     return data;
   } catch (err) {
     return { error: "Serveur injoignable" };
   }
 }
 
-// services/product.js
-
-// ... autres fonctions existantes ...
-
-// ✅ Approvisionner un produit (approvisionnement direct)
+// ✅ Approvisionner un produit
 export const approvisionnerProduit = async (productId, data) => {
   try {
-    const res = await fetch(`${API_URL}/products/${productId}/approvisionner`, {
+    const res = await fetch(`${API_URL}/${productId}/approvisionner`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-
     return await res.json();
   } catch (error) {
     console.error("Erreur approvisionnerProduit:", error);
@@ -112,7 +98,6 @@ export const transfertStockBoutiques = async (data) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-
     return await res.json();
   } catch (error) {
     console.error("Erreur transfertStockBoutiques:", error);
@@ -120,19 +105,14 @@ export const transfertStockBoutiques = async (data) => {
   }
 };
 
-// ➤ 8. Fonction helper pour ajouter une nouvelle variante à un produit existant
-export async function addVariantToProduit(produitId, nouvelleVariante) {
-  // Récupérer le produit actuel
-  const produit = await getProduit(produitId);
-  if (produit.error) return produit;
-
-  // Ajouter la nouvelle variante à la liste existante
-  const updatedVariants = [...produit.variants, nouvelleVariante];
-
-  // Mettre à jour le produit
-  return updateProduit(produitId, {
-    ...produit,
-    variants: updatedVariants
-  });
+// ➤ Récupérer les produits par boutique
+export async function getProduitsByBoutique(boutiqueId) {
+  try {
+    const res = await fetch(`${API_URL}/boutique/${boutiqueId}`);
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Erreur récupération produits" };
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
 }
-

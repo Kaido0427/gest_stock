@@ -21,36 +21,32 @@ const DashboardPage = () => {
     const loadUser = async () => {
       try {
         const currentUser = await getCurrentUser();
-        console.log("👤 Utilisateur chargé:", currentUser);
         
         if (!currentUser) {
-          console.warn("❌ Aucun utilisateur connecté");
           setLoading(false);
           return;
         }
 
         setUser(currentUser);
 
-        if (currentUser.role === "admin") {
-          // Admin : charger toutes les boutiques
-          const boutiquesData = await getBoutiques();
-          console.log("🏪 Boutiques chargées (admin):", boutiquesData);
+        // Charger les boutiques
+        const boutiquesData = await getBoutiques();
+
+        if (boutiquesData && boutiquesData.success && boutiquesData.data) {
+          const boutiquesArray = boutiquesData.data;
           
-          if (boutiquesData.success) {
-            setBoutiques(boutiquesData.data || []);
+          if (currentUser.role === "admin") {
+            // Admin : toutes les boutiques disponibles
+            setBoutiques(boutiquesArray);
+          } else if (currentUser.role === "employe" && currentUser.boutique) {
+            // Employé : uniquement sa boutique
+            const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
+            
+            if (maBoutique) {
+              setBoutiques([maBoutique]);
+              setSelectedBoutique(maBoutique);
+            }
           }
-        } else if (currentUser.role === "employe" && currentUser.boutique) {
-          // Employé : utiliser la boutique de l'utilisateur
-          const maBoutique = {
-            _id: currentUser.boutique.id,
-            name: currentUser.boutique.name,
-            description: currentUser.boutique.description
-          };
-          
-          console.log("🏪 Ma boutique (employé):", maBoutique);
-          
-          setBoutiques([maBoutique]);
-          setSelectedBoutique(maBoutique);
         }
       } catch (error) {
         console.error("🔥 Erreur loadUser:", error);
@@ -62,10 +58,7 @@ const DashboardPage = () => {
   }, []);
 
   const fetchData = async () => {
-    if (!user) {
-      console.warn("⚠️ fetchData appelé sans utilisateur");
-      return;
-    }
+    if (!user) return;
 
     setLoading(true);
     
@@ -77,19 +70,16 @@ const DashboardPage = () => {
         // Employé : toujours filtrer par sa boutique
         boutiqueId = user.boutique.id;
       } else if (user.role === "admin" && selectedBoutique) {
-        // Admin : filtrer par la boutique sélectionnée (si sélectionnée)
+        // Admin : filtrer par la boutique sélectionnée
         boutiqueId = selectedBoutique._id;
       }
-
-      console.log("📊 Chargement des données avec boutiqueId:", boutiqueId);
+      // Si admin sans boutique sélectionnée : boutiqueId reste null = toutes les boutiques
 
       // Charger les statistiques du jour
       const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
-      console.log("📈 Stats jour:", statsJourData);
       
       // Charger les statistiques du mois
       const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
-      console.log("📈 Stats mois:", statsMoisData);
 
       if (statsJourData.success && statsMoisData.success) {
         const globalJour = statsJourData.data?.global || {};
@@ -111,7 +101,6 @@ const DashboardPage = () => {
 
       // Charger l'historique des ventes
       const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
-      console.log("🛒 Ventes récentes:", ventesData);
       
       if (ventesData.success) {
         const ventes = (ventesData.data?.ventes || []).map(v => ({
@@ -130,7 +119,6 @@ const DashboardPage = () => {
 
       // Charger les alertes stock
       const alertesData = await getAlertesStock(10, boutiqueId);
-      console.log("⚠️ Alertes stock:", alertesData);
       
       if (alertesData.success) {
         setAlertes(alertesData.data || []);
@@ -145,7 +133,6 @@ const DashboardPage = () => {
 
   useEffect(() => {
     if (user) {
-      console.log("🔄 Déclenchement fetchData - user:", user.role, "boutique:", selectedBoutique?.name || "Toutes");
       fetchData();
     }
   }, [user, selectedBoutique]);
@@ -172,30 +159,41 @@ const DashboardPage = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Tableau de bord</h1>
-          {selectedBoutique && (
-            <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-              <Store className="w-4 h-4" />
-              {selectedBoutique.name}
-              {user.role === "employe" && (
-                <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                  Ma boutique
-                </span>
-              )}
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+            {selectedBoutique ? (
+              <>
+                <Store className="w-4 h-4" />
+                {selectedBoutique.name}
+                {user.role === "employe" && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                    Ma boutique
+                  </span>
+                )}
+              </>
+            ) : (
+              user.role === "admin" && (
+                <>
+                  <Store className="w-4 h-4" />
+                  Toutes les boutiques
+                </>
+              )
+            )}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Sélecteur de boutique (ADMIN uniquement) */}
           {user.role === "admin" && boutiques.length > 0 && (
-            <div className="relative">
+            <div className="relative min-w-[200px]">
               <select
                 value={selectedBoutique?._id || ""}
                 onChange={(e) => {
-                  const boutique = boutiques.find(b => b._id === e.target.value);
-                  setSelectedBoutique(boutique || null);
+                  const boutique = e.target.value 
+                    ? boutiques.find(b => b._id === e.target.value)
+                    : null;
+                  setSelectedBoutique(boutique);
                 }}
-                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer text-sm"
+                className="appearance-none w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer text-sm font-medium transition-all hover:border-gray-400"
               >
                 <option value="">📊 Toutes les boutiques</option>
                 {boutiques.map(b => (
@@ -212,7 +210,7 @@ const DashboardPage = () => {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Actualiser
@@ -226,15 +224,17 @@ const DashboardPage = () => {
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-blue-100 text-sm">Ventes du jour</p>
+              <p className="text-blue-100 text-sm font-medium">Ventes du jour</p>
               <h3 className="text-3xl font-bold mt-2">
-                {stats.today.sales.toLocaleString()} FCFA
+                {stats.today.sales.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-blue-100 text-sm mt-2">
                 {stats.today.transactions} transaction{stats.today.transactions > 1 ? 's' : ''}
               </p>
             </div>
-            <DollarSign className="w-12 h-12 text-blue-200" />
+            <div className="p-3 bg-white/20 rounded-lg">
+              <DollarSign className="w-8 h-8" />
+            </div>
           </div>
         </div>
 
@@ -242,15 +242,17 @@ const DashboardPage = () => {
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-green-100 text-sm">Ventes du mois</p>
+              <p className="text-green-100 text-sm font-medium">Ventes du mois</p>
               <h3 className="text-3xl font-bold mt-2">
-                {stats.month.sales.toLocaleString()} FCFA
+                {stats.month.sales.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-green-100 text-sm mt-2">
                 {stats.month.transactions} transaction{stats.month.transactions > 1 ? 's' : ''}
               </p>
             </div>
-            <TrendingUp className="w-12 h-12 text-green-200" />
+            <div className="p-3 bg-white/20 rounded-lg">
+              <TrendingUp className="w-8 h-8" />
+            </div>
           </div>
         </div>
 
@@ -258,7 +260,7 @@ const DashboardPage = () => {
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-purple-100 text-sm">Quantité vendue</p>
+              <p className="text-purple-100 text-sm font-medium">Quantité vendue</p>
               <h3 className="text-3xl font-bold mt-2">
                 {topProduits.reduce((sum, p) => sum + (p.quantiteVendue || 0), 0)}
               </h3>
@@ -266,7 +268,9 @@ const DashboardPage = () => {
                 {topProduits.length} produit{topProduits.length > 1 ? 's' : ''}
               </p>
             </div>
-            <Package className="w-12 h-12 text-purple-200" />
+            <div className="p-3 bg-white/20 rounded-lg">
+              <Package className="w-8 h-8" />
+            </div>
           </div>
         </div>
       </div>
@@ -275,29 +279,33 @@ const DashboardPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Ventes récentes */}
         <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Ventes récentes</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-blue-600" />
+            Ventes récentes
+          </h2>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {sales.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Aucune vente récente</p>
+              <div className="text-center py-12 text-gray-400">
+                <ShoppingCart className="w-16 h-16 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">Aucune vente récente</p>
+                <p className="text-sm mt-1">Les ventes apparaîtront ici</p>
               </div>
             ) : (
               sales.map(sale => (
                 <div 
                   key={sale.id} 
-                  className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-white border border-gray-100 rounded-lg hover:shadow-md transition-all"
                 >
                   <div>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm font-medium text-gray-700">
                       {sale.date}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
+                    <p className="text-xs text-gray-500 mt-1">
                       {sale.items} article{sale.items > 1 ? 's' : ''}
                     </p>
                   </div>
-                  <p className="font-bold text-green-600">
-                    {sale.total.toLocaleString()} FCFA
+                  <p className="font-bold text-lg text-green-600">
+                    {sale.total.toLocaleString()} <span className="text-sm">FCFA</span>
                   </p>
                 </div>
               ))
@@ -307,27 +315,32 @@ const DashboardPage = () => {
 
         {/* Alertes Stock */}
         <div className="bg-white p-6 rounded-xl shadow">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Alertes Stock</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-orange-600" />
+            Alertes Stock
+          </h2>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {alertes.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
-                <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Aucun produit en alerte</p>
+              <div className="text-center py-12 text-gray-400">
+                <Package className="w-16 h-16 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">Aucune alerte stock</p>
+                <p className="text-sm mt-1">Tous les produits sont bien approvisionnés</p>
               </div>
             ) : (
               alertes.map((a, idx) => (
                 <div 
-                  key={a.variantId || idx} 
-                  className="flex items-center gap-3 p-3 bg-orange-50 border-l-4 border-orange-500 rounded hover:bg-orange-100 transition-colors"
+                  key={a.produitId || idx} 
+                  className="flex items-center gap-3 p-4 bg-orange-50 border-l-4 border-orange-500 rounded-lg hover:bg-orange-100 transition-colors"
                 >
-                  <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-orange-600" />
+                  </div>
                   <div className="flex-1">
                     <p className="font-semibold text-gray-800">
                       {a.produitName || a.productName || 'Produit'}
-                      {a.variantName && ` - ${a.variantName}`}
                     </p>
-                    <p className="text-sm text-gray-600">
-                      Stock: <span className="font-medium text-orange-600">{a.stock}</span>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Stock: <span className="font-bold text-orange-600">{a.stock} {a.unit}</span>
                     </p>
                   </div>
                 </div>

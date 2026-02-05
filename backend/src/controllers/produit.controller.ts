@@ -40,7 +40,6 @@ const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number
     // Pour les unités comptables, pas de conversion
     return quantity;
 };
-
 // ✅ Helper pour calculer le prix selon l'unité de vente
 const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, soldQuantity: number): number => {
     // Convertir 1 unité vendue en unité de base pour savoir le ratio
@@ -50,7 +49,6 @@ const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, s
     // Total
     return pricePerSoldUnit * soldQuantity;
 };
-
 // ➤ 1. Créer un produit
 export const createProduit = async (c: Context) => {
     try {
@@ -102,38 +100,6 @@ export const createProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
-// ➤ 2. Récupérer tous les produits
-export const getProduits = async (c: Context) => {
-    try {
-        const { boutique_id, category } = c.req.query();
-
-        let query: any = {};
-        if (boutique_id) query.boutique_id = boutique_id;
-        if (category) query.category = category;
-
-        const produits = await Produit.find(query).sort({ createdAt: -1 });
-        return c.json({ success: true, data: produits });
-    } catch (error) {
-        const err = error as Error;
-        return c.json({ error: err.message }, 500);
-    }
-};
-
-// ➤ 3. Récupérer un produit par ID
-export const getProduitById = async (c: Context) => {
-    try {
-        const id = c.req.param("id");
-        const produit = await Produit.findById(id);
-
-        if (!produit) return c.json({ error: "Produit introuvable" }, 404);
-        return c.json({ success: true, data: produit });
-    } catch (error) {
-        const err = error as Error;
-        return c.json({ error: err.message }, 500);
-    }
-};
-
 // ➤ 4. Mettre à jour un produit
 export const updateProduit = async (c: Context) => {
     try {
@@ -167,7 +133,6 @@ export const updateProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
 // ➤ 5. Supprimer un produit
 export const deleteProduit = async (c: Context) => {
     try {
@@ -181,7 +146,6 @@ export const deleteProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
 // ➤ 6. APPROVISIONNER un produit (ajouter au stock)
 export const approvisionnerProduit = async (c: Context) => {
     try {
@@ -222,7 +186,6 @@ export const approvisionnerProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
 // ➤ 8. TRANSFERT DE STOCK ENTRE BOUTIQUES
 export const transfertStockBoutiques = async (c: Context) => {
     console.group("🔄 [BACKEND] transfertStockBoutiques");
@@ -327,7 +290,6 @@ export const transfertStockBoutiques = async (c: Context) => {
         console.groupEnd();
     }
 };
-
 // ➤ 7. VENDRE un produit (la complexité est ici !)
 export const vendreProduit = async (c: Context) => {
     console.group("🛒 [BACKEND] vendreProduit");
@@ -450,7 +412,6 @@ export const vendreProduit = async (c: Context) => {
         console.groupEnd();
     }
 };
-
 // ➤ 8. Alertes stock
 export const getAlertesStock = async (c: Context) => {
     try {
@@ -500,7 +461,6 @@ export const getProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
 // ➤ 3. Voir tous les produits
 export const getAllProduits = async (c: Context) => {
     try {
@@ -511,7 +471,6 @@ export const getAllProduits = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-
 // ➤ 3b. Voir tous les produits d'une boutique spécifique
 export const getProduitsByBoutique = async (c: Context) => {
     try {
