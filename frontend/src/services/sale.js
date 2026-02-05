@@ -59,53 +59,6 @@ export async function vendreProduit(produitId, quantity, unit = null, customPric
     console.groupEnd();
   }
 }
-
-// ➤ Vendre une variante spécifique (si vous en avez besoin)
-export async function vendreVariante(produitId, variantId, quantity) {
-  console.group("🧾 vendreVariante DEBUG");
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-  
-  try {
-    const url = `${API_URL}/produit/${produitId}/vendre`;
-    console.log("🌐 URL :", url);
-    
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ variantId, quantity }),
-    });
-    
-    console.log("✅ status :", res.status);
-    
-    const text = await res.text();
-    console.log("📄 réponse brute :", text);
-    
-    const data = text ? JSON.parse(text) : {};
-    
-    if (!res.ok) {
-      return { error: data?.error || data?.message || `HTTP ${res.status}` };
-    }
-    
-    return data || { success: true };
-    
-  } catch (err) {
-    console.error("🔥 erreur fetch :", err);
-    if (err.name === "AbortError") {
-      return { error: "Timeout backend" };
-    }
-    return { error: "Serveur injoignable" };
-  } finally {
-    clearTimeout(timeoutId);
-    console.groupEnd();
-  }
-}
-
 // ➤ Valider une vente complète
 export async function validerVente(venteData) {
   try {
@@ -191,7 +144,6 @@ export async function getBoutiques() {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
     const data = await res.json();
-
     if (!res.ok) return { error: data.error || "Erreur récupération boutiques" };
     return data;
   } catch (err) {
