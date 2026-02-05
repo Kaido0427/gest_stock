@@ -132,17 +132,15 @@ const ProductModal = ({ isOpen, onClose, product }) => {
 
   // Catégories d'exemple
   const categories = [
-    "Alimentaire",
-    "Boissons",
-    "Liquides",
-    "Céréales",
-    "Condiments",
-    "Ustensiles",
-    "Nettoyage",
-    "Cosmétique",
-    "Meuble",
-    "Électronique",
-    "Textile",
+    "Produits chimiques",
+    "Plastique yaourt et jus",
+    "Plastic Pch.",
+    "Essences, huile et parfum",
+    "Plastic BC",
+    "Plastic BE",
+    "Plastic KT",
+    "Plastic épice",
+    "Take away",
     "Autre",
   ];
 
