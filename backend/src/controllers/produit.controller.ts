@@ -203,17 +203,20 @@ export const transfertStockBoutiques = async (c: Context) => {
             return c.json({ error: "La boutique source et destination doivent être différentes" }, 400);
         }
 
-        // Trouver le produit dans la boutique source
+        // ✅ Trouver le produit dans la boutique source par _id ET boutique_id
         const produitSrc = await Produit.findOne({
-            name: produitId, // On cherche par nom de produit
+            _id: produitId,              // ✅ Chercher par _id MongoDB
             boutique_id: boutiqueSrcId
         });
 
         if (!produitSrc) {
+            console.warn("❌ Produit introuvable:", { produitId, boutiqueSrcId });
             return c.json({ error: "Produit introuvable dans la boutique source" }, 404);
         }
 
-        // Trouver le produit dans la boutique destination
+        console.log("✅ Produit source trouvé:", produitSrc.name);
+
+        // Trouver le produit dans la boutique destination (par nom de produit)
         let produitDest = await Produit.findOne({
             name: produitSrc.name,
             boutique_id: boutiqueDestId
@@ -227,6 +230,8 @@ export const transfertStockBoutiques = async (c: Context) => {
             quantityToTransfer = convertUnit(quantity, unitToUse, produitSrc.unit);
         }
 
+        console.log("📦 Quantité à transférer:", quantityToTransfer, produitSrc.unit);
+
         // Vérifier le stock de la boutique source
         if (produitSrc.stock < quantityToTransfer) {
             return c.json({
@@ -238,6 +243,8 @@ export const transfertStockBoutiques = async (c: Context) => {
         const oldStockSrc = produitSrc.stock;
         produitSrc.stock -= quantityToTransfer;
         await produitSrc.save();
+
+        console.log("✅ Stock source mis à jour:", oldStockSrc, "→", produitSrc.stock);
 
         // Si le produit n'existe pas dans la destination, le créer
         if (!produitDest) {
@@ -258,7 +265,7 @@ export const transfertStockBoutiques = async (c: Context) => {
             produitDest.stock += quantityToTransfer;
             await produitDest.save();
 
-            console.log("✅ Stock ajouté à la boutique destination");
+            console.log("✅ Stock destination mis à jour:", oldStockDest, "→", produitDest.stock);
         }
 
         console.log("🎉 Transfert terminé avec succès");
