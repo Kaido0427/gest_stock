@@ -1,17 +1,76 @@
 // services/sale.js
 const API_URL = "https://api.mahoutodji.online";
 
-// ➤ Vendre une variante spécifique
-export async function vendreProduit(produitId, variantId, quantity) {
-  console.group("🧾 vendreProduit DEBUG");
+// services/sale.js
 
+// ➤ Vendre un produit (sans variante)
+export async function vendreProduit(produitId, quantity, unit = null, customPrice = null) {
+  console.group("🧾 vendreProduit DEBUG");
+  
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
-
+  
   try {
     const url = `${API_URL}/produit/${produitId}/vendre`;
     console.log("🌐 URL :", url);
+    
+    // Construire le payload
+    const payload = {
+      quantity: parseFloat(quantity),  // ✅ Nombre
+      unit: unit || undefined,         // ✅ Unité (optionnel)
+      customPrice: customPrice !== null && customPrice !== undefined 
+        ? parseFloat(customPrice) 
+        : undefined
+    };
+    
+    console.log("📦 Payload :", payload);
+    
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify(payload),
+    });
+    
+    console.log("✅ status :", res.status);
+    
+    const text = await res.text();
+    console.log("📄 réponse brute :", text);
+    
+    const data = text ? JSON.parse(text) : {};
+    
+    if (!res.ok) {
+      return { error: data?.error || data?.message || `HTTP ${res.status}` };
+    }
+    
+    return data || { success: true };
+    
+  } catch (err) {
+    console.error("🔥 erreur fetch :", err);
+    if (err.name === "AbortError") {
+      return { error: "Timeout backend" };
+    }
+    return { error: "Serveur injoignable" };
+  } finally {
+    clearTimeout(timeoutId);
+    console.groupEnd();
+  }
+}
 
+// ➤ Vendre une variante spécifique (si vous en avez besoin)
+export async function vendreVariante(produitId, variantId, quantity) {
+  console.group("🧾 vendreVariante DEBUG");
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const url = `${API_URL}/produit/${produitId}/vendre`;
+    console.log("🌐 URL :", url);
+    
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -21,56 +80,56 @@ export async function vendreProduit(produitId, variantId, quantity) {
       signal: controller.signal,
       body: JSON.stringify({ variantId, quantity }),
     });
-
+    
     console.log("✅ status :", res.status);
-
+    
     const text = await res.text();
     console.log("📄 réponse brute :", text);
-
+    
     const data = text ? JSON.parse(text) : {};
-
+    
     if (!res.ok) {
       return { error: data?.error || data?.message || `HTTP ${res.status}` };
     }
-
+    
     return data || { success: true };
-
+    
   } catch (err) {
     console.error("🔥 erreur fetch :", err);
-
     if (err.name === "AbortError") {
       return { error: "Timeout backend" };
     }
-
     return { error: "Serveur injoignable" };
-
   } finally {
     clearTimeout(timeoutId);
     console.groupEnd();
   }
 }
 
-
 // ➤ Valider une vente complète
 export async function validerVente(venteData) {
   try {
-    const res = await fetch(`${API_URL}/ventes`, {
+    const res = await fetch(`${API_URL}/ventes`, { // ✅ Corrigé la syntaxe
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(venteData),
     });
-
+    
     const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur lors de la vente" };
-
+    
+    if (!res.ok) {
+      return { error: data.error || "Erreur lors de la vente" };
+    }
+    
     return data;
+    
   } catch (err) {
+    console.error("🔥 erreur validerVente :", err);
     return { error: "Serveur injoignable" };
   }
 }
-
 export async function getStatistiquesVentes(periode = "jour", boutiqueId = null) {
   try {
     const url = boutiqueId 

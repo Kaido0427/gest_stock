@@ -71,7 +71,7 @@ const SalesPage = ({ products, onRefreshProducts }) => {
       id: `${selectedProduct._id}-${Date.now()}`,
       productId: selectedProduct._id,
       productName: selectedProduct.name,
-      quantity: quantity,
+      quantity: parseFloat(quantity),
       unit: unitToSell,
       baseUnit: selectedProduct.unit,
       basePrice: selectedProduct.basePrice,
@@ -134,12 +134,11 @@ const SalesPage = ({ products, onRefreshProducts }) => {
           unit: item.unit,
           customPrice: item.customPrice
         });
-
         const result = await vendreProduit(
           item.productId,
-          item.quantity,
+          parseFloat(item.quantity), // ✅ Forcer en nombre
           item.unit,
-          item.customPrice
+          item.customPrice ? parseFloat(item.customPrice) : null // ✅ Aussi ici
         );
 
         console.log("[Checkout] result vendreProduit:", result);
@@ -215,8 +214,8 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                     key={category}
                     onClick={() => setSelectedCategory(category)}
                     className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === category
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                   >
                     {category}
@@ -401,8 +400,8 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
                       disabled={quantity <= 1}
                       className={`p-2 rounded-lg ${quantity <= 1
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
                     >
                       <Minus className="w-4 h-4" />
