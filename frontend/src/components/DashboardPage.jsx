@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { RefreshCw, DollarSign, TrendingUp, Package, AlertTriangle, Store, ChevronDown } from "lucide-react";
+import { RefreshCw, DollarSign, TrendingUp, Package, AlertTriangle, Store, ChevronDown, ShoppingCart } from "lucide-react";
 import { getStatistiquesVentes, getHistoriqueVentes, getAlertesStock, getBoutiques } from "../services/sale";
 import { getCurrentUser } from "../services/auth";
 
@@ -19,93 +19,149 @@ const DashboardPage = () => {
   // Charger l'utilisateur et ses boutiques
   useEffect(() => {
     const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
+      try {
+        const currentUser = await getCurrentUser();
+        console.log("👤 Utilisateur chargé:", currentUser);
+        
+        if (!currentUser) {
+          console.warn("❌ Aucun utilisateur connecté");
+          setLoading(false);
+          return;
+        }
 
-      if (currentUser?.role === "admin") {
-        // Admin : charger toutes les boutiques
-        const boutiquesData = await getBoutiques();
-        if (boutiquesData.success) {
-          setBoutiques(boutiquesData.data);
-        }
-      } else if (currentUser?.role === "employe" && currentUser?.boutique_id) {
-        // Employé : charger uniquement sa boutique
-        const boutiquesData = await getBoutiques();
-        if (boutiquesData.success) {
-          const maBoutique = boutiquesData.data.find(
-            b => b._id === currentUser.boutique_id
-          );
-          if (maBoutique) {
-            setBoutiques([maBoutique]);
-            setSelectedBoutique(maBoutique); // Sélectionner automatiquement sa boutique
+        setUser(currentUser);
+
+        if (currentUser.role === "admin") {
+          // Admin : charger toutes les boutiques
+          const boutiquesData = await getBoutiques();
+          console.log("🏪 Boutiques chargées (admin):", boutiquesData);
+          
+          if (boutiquesData.success) {
+            setBoutiques(boutiquesData.data || []);
           }
+        } else if (currentUser.role === "employe" && currentUser.boutique) {
+          // Employé : utiliser la boutique de l'utilisateur
+          const maBoutique = {
+            _id: currentUser.boutique.id,
+            name: currentUser.boutique.name,
+            description: currentUser.boutique.description
+          };
+          
+          console.log("🏪 Ma boutique (employé):", maBoutique);
+          
+          setBoutiques([maBoutique]);
+          setSelectedBoutique(maBoutique);
         }
+      } catch (error) {
+        console.error("🔥 Erreur loadUser:", error);
+        setLoading(false);
       }
     };
+    
     loadUser();
   }, []);
 
   const fetchData = async () => {
+    if (!user) {
+      console.warn("⚠️ fetchData appelé sans utilisateur");
+      return;
+    }
+
     setLoading(true);
     
-    // Déterminer l'ID de la boutique à filtrer
-    let boutiqueId = null;
-    
-    if (user?.role === "employe") {
-      // Employé : toujours filtrer par sa boutique
-      boutiqueId = user.boutique_id;
-    } else if (user?.role === "admin" && selectedBoutique) {
-      // Admin : filtrer par la boutique sélectionnée (si sélectionnée)
-      boutiqueId = selectedBoutique._id;
-    }
+    try {
+      // Déterminer l'ID de la boutique à filtrer
+      let boutiqueId = null;
+      
+      if (user.role === "employe" && user.boutique) {
+        // Employé : toujours filtrer par sa boutique
+        boutiqueId = user.boutique.id;
+      } else if (user.role === "admin" && selectedBoutique) {
+        // Admin : filtrer par la boutique sélectionnée (si sélectionnée)
+        boutiqueId = selectedBoutique._id;
+      }
 
-    // Charger les statistiques
-    const statsData = await getStatistiquesVentes("jour", boutiqueId);
-    if (statsData.success) {
-      const global = statsData.data.global || {};
-      setStats({
-        today: { sales: global.montantTotal || 0, transactions: global.totalVentes || 0 },
-        month: { sales: global.montantTotal || 0, transactions: global.totalVentes || 0 }
-      });
-      setTopProduits(statsData.data.topProduits || []);
-    }
+      console.log("📊 Chargement des données avec boutiqueId:", boutiqueId);
 
-    // Charger l'historique des ventes
-    const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
-    if (ventesData.success) {
-      const ventes = ventesData.data.ventes.map(v => ({
-        id: v._id,
-        date: new Date(v.date).toLocaleString('fr-FR', {
-          day: '2-digit',
-          month: 'short',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        items: v.items.reduce((sum, i) => sum + (i.quantitySold || i.quantity || 0), 0),
-        total: v.totalAmount
-      }));
-      setSales(ventes);
-    }
+      // Charger les statistiques du jour
+      const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
+      console.log("📈 Stats jour:", statsJourData);
+      
+      // Charger les statistiques du mois
+      const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
+      console.log("📈 Stats mois:", statsMoisData);
 
-    // Charger les alertes stock
-    const alertesData = await getAlertesStock(10, boutiqueId);
-    if (alertesData.success) {
-      setAlertes(alertesData.data);
-    }
+      if (statsJourData.success && statsMoisData.success) {
+        const globalJour = statsJourData.data?.global || {};
+        const globalMois = statsMoisData.data?.global || {};
+        
+        setStats({
+          today: { 
+            sales: globalJour.montantTotal || 0, 
+            transactions: globalJour.totalVentes || 0 
+          },
+          month: { 
+            sales: globalMois.montantTotal || 0, 
+            transactions: globalMois.totalVentes || 0 
+          }
+        });
+        
+        setTopProduits(statsJourData.data?.topProduits || []);
+      }
 
-    setLoading(false);
+      // Charger l'historique des ventes
+      const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
+      console.log("🛒 Ventes récentes:", ventesData);
+      
+      if (ventesData.success) {
+        const ventes = (ventesData.data?.ventes || []).map(v => ({
+          id: v._id,
+          date: new Date(v.date).toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          items: (v.items || []).reduce((sum, i) => sum + (i.quantitySold || i.quantity || 0), 0),
+          total: v.totalAmount || 0
+        }));
+        setSales(ventes);
+      }
+
+      // Charger les alertes stock
+      const alertesData = await getAlertesStock(10, boutiqueId);
+      console.log("⚠️ Alertes stock:", alertesData);
+      
+      if (alertesData.success) {
+        setAlertes(alertesData.data || []);
+      }
+
+    } catch (error) {
+      console.error("🔥 Erreur fetchData:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     if (user) {
+      console.log("🔄 Déclenchement fetchData - user:", user.role, "boutique:", selectedBoutique?.name || "Toutes");
       fetchData();
     }
   }, [user, selectedBoutique]);
 
-  if (!user) {
+  if (loading && !user) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500">Utilisateur non connecté</p>
       </div>
     );
   }
