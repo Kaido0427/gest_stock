@@ -6,11 +6,10 @@ import {
     getAllProduits,
     updateProduit,
     deleteProduit,
-    deleteVariant,
-    approvisionnerVariant,
     vendreProduit,
     getAlertesStock,
-    getProduitsByBoutique
+    getProduitsByBoutique,
+    transfertStockBoutiques,
 } from '../controllers/produit.controller.js';
 
 const produitRoutes = new Hono();
@@ -23,11 +22,10 @@ produitRoutes.get('/:id', getProduit);
 produitRoutes.put('/:id', updateProduit);
 produitRoutes.delete('/:id', deleteProduit);
 
-// Gestion des variantes
-produitRoutes.delete('/:id/variant', deleteVariant);
-produitRoutes.post('/:id/approvisionner', approvisionnerVariant);
+
 produitRoutes.post('/:id/vendre', vendreProduit);
 produitRoutes.get('/produitByBoutique/:boutiqueId', getProduitsByBoutique);
+produitRoutes.post("/products/transfert-stock", transfertStockBoutiques);
 
 
 

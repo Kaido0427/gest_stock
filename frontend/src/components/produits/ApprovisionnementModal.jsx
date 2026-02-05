@@ -1,51 +1,50 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Package, Plus } from "lucide-react";
-import { approvisionnerVariant } from "../../services/product";
+import { X, Package, Plus, ArrowRight, Store } from "lucide-react";
+import { approvisionnerProduit, transfertStockBoutiques } from "../../services/product";
+import { getAllBoutiques } from "../../services/boutique";
 
 const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
+  const [modeAppro, setModeAppro] = useState("direct"); // "direct" ou "transfert"
   const [form, setForm] = useState({
-    variantId: "",
     quantity: 0,
-    selectedVariant: null
+    unit: "",
+    boutiqueSrcId: "", // Pour le transfert
   });
 
+  const [boutiques, setBoutiques] = useState([]);
+  const [loadingBoutiques, setLoadingBoutiques] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Charger les boutiques
   useEffect(() => {
-    if (product && product.variants && product.variants.length > 0) {
-      // Sélectionner la première variante par défaut
+    const fetchBoutiques = async () => {
+      setLoadingBoutiques(true);
+      const res = await getAllBoutiques();
+      if (!res.error) {
+        setBoutiques(res);
+      }
+      setLoadingBoutiques(false);
+    };
+
+    if (isOpen && modeAppro === "transfert") {
+      fetchBoutiques();
+    }
+  }, [isOpen, modeAppro]);
+
+  useEffect(() => {
+    if (product) {
       setForm({
-        variantId: product.variants[0]._id || "",
         quantity: 0,
-        selectedVariant: product.variants[0]
-      });
-    } else {
-      setForm({
-        variantId: "",
-        quantity: 0,
-        selectedVariant: null
+        unit: product.unit || "",
+        boutiqueSrcId: "",
       });
     }
   }, [product]);
 
   const handleChange = (e) => {
     const value = e.target.type === "number" ? Number(e.target.value) : e.target.value;
-    
-    if (e.target.name === "variantId") {
-      // Trouver la variante sélectionnée
-      const selectedVariant = product.variants.find(v => 
-        v._id && v._id.toString() === e.target.value
-      );
-      
-      setForm({ 
-        ...form, 
-        variantId: value,
-        selectedVariant: selectedVariant || null
-      });
-    } else {
-      setForm({ ...form, [e.target.name]: value });
-    }
+    setForm({ ...form, [e.target.name]: value });
   };
 
   const handleSubmit = async (e) => {
@@ -56,11 +55,6 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
       return;
     }
 
-    if (!form.variantId) {
-      alert("Veuillez sélectionner une variante");
-      return;
-    }
-
     if (form.quantity <= 0) {
       alert("La quantité doit être supérieure à 0");
       return;
@@ -68,18 +62,41 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
 
     setLoading(true);
 
-    const res = await approvisionnerVariant(
-      product._id,
-      form.variantId,
-      form.quantity
-    );
+    let res;
+
+    if (modeAppro === "direct") {
+      // Approvisionnement direct
+      res = await approvisionnerProduit(product._id, {
+        quantity: form.quantity,
+        unit: form.unit,
+      });
+    } else {
+      // Transfert entre boutiques
+      if (!form.boutiqueSrcId) {
+        alert("Veuillez sélectionner la boutique source");
+        setLoading(false);
+        return;
+      }
+
+      res = await transfertStockBoutiques({
+        produitId: product._id,
+        boutiqueSrcId: form.boutiqueSrcId,
+        boutiqueDestId: product.boutique_id._id || product.boutique_id,
+        quantity: form.quantity,
+        unit: form.unit,
+      });
+    }
 
     setLoading(false);
 
     if (res.error) {
       alert(res.error);
     } else {
-      alert("Approvisionnement réussi !");
+      alert(
+        modeAppro === "direct"
+          ? "Approvisionnement réussi !"
+          : "Transfert de stock réussi !"
+      );
       onClose();
     }
   };
@@ -87,8 +104,25 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
   if (!isOpen || !product) return null;
 
   // Calculer les nouveaux stocks
-  const stockActuel = form.selectedVariant ? form.selectedVariant.stock || 0 : 0;
+  const stockActuel = product.stock || 0;
   const nouveauStock = stockActuel + (form.quantity || 0);
+  const valeurAjoutee = (product.basePrice || 0) * (form.quantity || 0);
+  const nouvelleValeur = (product.basePrice || 0) * nouveauStock;
+
+  // Unités disponibles
+  const units = [
+    { label: "Liquides", options: ["L", "cL", "mL", "kL"] },
+    { label: "Poids", options: ["kg", "g", "mg", "t"] },
+    {
+      label: "Comptables",
+      options: ["pièce", "sachet", "bouteille", "carton", "paquet", "boîte"],
+    },
+  ];
+
+  // Filtrer les autres boutiques pour le transfert
+  const autresBoutiques = boutiques.filter(
+    (b) => b._id !== (product.boutique_id._id || product.boutique_id)
+  );
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -96,13 +130,13 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md"
+        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Package className="w-6 h-6 text-green-600" />
-              Approvisionner une variante
+              Approvisionner le stock
             </h2>
             <p className="text-gray-600 mt-1">{product.name}</p>
           </div>
@@ -115,169 +149,251 @@ const ApprovisionnementModal = ({ isOpen, onClose, product }) => {
           </button>
         </div>
 
+        {/* Sélection du mode d'approvisionnement */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Mode d'approvisionnement
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setModeAppro("direct")}
+              className={`p-4 rounded-lg border-2 transition-all ${modeAppro === "direct"
+                  ? "border-green-500 bg-green-50"
+                  : "border-gray-200 hover:border-gray-300"
+                }`}
+            >
+              <Package className="w-6 h-6 mx-auto mb-2 text-green-600" />
+              <div className="font-medium text-gray-800">
+                Approvisionnement direct
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Ajouter du stock manuellement
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModeAppro("transfert")}
+              className={`p-4 rounded-lg border-2 transition-all ${modeAppro === "transfert"
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-200 hover:border-gray-300"
+                }`}
+            >
+              <ArrowRight className="w-6 h-6 mx-auto mb-2 text-blue-600" />
+              <div className="font-medium text-gray-800">
+                Transfert entre boutiques
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Transférer depuis une autre boutique
+              </div>
+            </button>
+          </div>
+        </div>
+
         {/* Informations du produit */}
-        <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <div className="space-y-3">
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="text-sm text-gray-600">Produit</div>
               <div className="font-medium text-gray-800">{product.name}</div>
             </div>
-            
+
             <div>
-              <div className="text-sm text-gray-600">Catégorie</div>
-              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
-                {product.category || "Non catégorisé"}
-              </span>
+              <div className="text-sm text-gray-600">Boutique destination</div>
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-indigo-500" />
+                <span className="font-medium text-gray-800">
+                  {product.boutique_id?.name || "Non définie"}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-sm text-gray-600">Stock actuel</div>
+              <div className="font-bold text-blue-600">
+                {stockActuel} {product.unit}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-sm text-gray-600">Prix unitaire</div>
+              <div className="font-medium text-green-600">
+                {(product.basePrice || 0).toLocaleString()} FCFA / {product.unit}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Sélection de la variante */}
-        {product.variants && product.variants.length > 0 ? (
-          <>
-            <div className="mb-6">
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          {/* Boutique source (uniquement pour transfert) */}
+          {modeAppro === "transfert" && (
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Sélectionnez la variante à approvisionner *
+                Boutique source *
               </label>
               <select
-                name="variantId"
-                value={form.variantId}
+                name="boutiqueSrcId"
+                value={form.boutiqueSrcId}
                 onChange={handleChange}
-                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                disabled={loading}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                disabled={loading || loadingBoutiques}
+                required
               >
-                {product.variants.map((variant, index) => (
-                  <option key={index} value={variant._id}>
-                    {variant.name} - Stock: {variant.stock} - Prix: {variant.price.toLocaleString()} FCFA
+                <option value="">
+                  {loadingBoutiques
+                    ? "Chargement..."
+                    : "Sélectionner la boutique source"}
+                </option>
+                {autresBoutiques.map((boutique) => (
+                  <option key={boutique._id} value={boutique._id}>
+                    {boutique.name}
+                    {boutique.address && ` - ${boutique.address}`}
                   </option>
                 ))}
               </select>
+              {autresBoutiques.length === 0 && !loadingBoutiques && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ Aucune autre boutique disponible pour le transfert
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Quantité à ajouter *
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                value={form.quantity}
+                onChange={handleChange}
+                min="0.01"
+                step="0.01"
+                placeholder="Ex: 50"
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-green-500"
+                required
+                disabled={loading}
+              />
             </div>
 
-            {/* Informations de la variante sélectionnée */}
-            {form.selectedVariant && (
-              <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-sm text-gray-600">Variante sélectionnée</div>
-                      <div className="font-medium text-gray-800">{form.selectedVariant.name}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-green-700">
-                        {form.selectedVariant.price.toLocaleString()} FCFA
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-gray-600">Stock actuel</div>
-                      <div className="text-2xl font-bold text-blue-700">
-                        {stockActuel} pièce(s)
-                      </div>
-                    </div>
-                    
-                    {form.quantity > 0 && (
-                      <div>
-                        <div className="text-sm text-gray-600">Nouveau stock</div>
-                        <div className="text-2xl font-bold text-green-700">
-                          {nouveauStock} pièce(s)
-                        </div>
-                        <div className="text-sm text-green-600">
-                          +{form.quantity} pièce(s)
-                        </div>
-                      </div>
-                    )}
-                  </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unité
+              </label>
+              <select
+                name="unit"
+                value={form.unit}
+                onChange={handleChange}
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-green-500"
+                disabled={loading}
+              >
+                <option value={product.unit}>
+                  {product.unit} (unité de base)
+                </option>
+                {units.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options
+                      .filter((u) => u !== product.unit)
+                      .map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {form.unit !== product.unit
+                  ? `Sera converti en ${product.unit}`
+                  : "Unité de base du produit"}
+              </p>
+            </div>
+          </div>
 
-                  {/* Valeur du stock */}
-                  <div className="pt-3 border-t border-green-200">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Valeur actuelle du stock</span>
-                      <span className="font-medium">
-                        {(form.selectedVariant.price * stockActuel).toLocaleString()} FCFA
-                      </span>
-                    </div>
-                    {form.quantity > 0 && (
-                      <div className="flex justify-between mt-1">
-                        <span className="text-sm text-gray-600">Nouvelle valeur</span>
-                        <span className="font-bold text-green-700">
-                          {(form.selectedVariant.price * nouveauStock).toLocaleString()} FCFA
-                        </span>
-                      </div>
-                    )}
+          {/* Aperçu */}
+          {form.quantity > 0 && (
+            <div className="p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
+              <h4 className="font-medium text-gray-700 mb-3">
+                📊 Aperçu après approvisionnement
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm text-gray-600">Nouveau stock</div>
+                  <div className="text-2xl font-bold text-green-700">
+                    {form.unit !== product.unit
+                      ? `${nouveauStock} ${product.unit}`
+                      : `${nouveauStock} ${form.unit}`}
+                  </div>
+                  <div className="text-sm text-green-600 mt-1">
+                    +{form.quantity} {form.unit}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-sm text-gray-600">Nouvelle valeur</div>
+                  <div className="text-2xl font-bold text-purple-700">
+                    {nouvelleValeur.toLocaleString()} FCFA
+                  </div>
+                  <div className="text-sm text-purple-600 mt-1">
+                    +{valeurAjoutee.toLocaleString()} FCFA
                   </div>
                 </div>
               </div>
-            )}
 
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantité à ajouter *
-                </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={form.quantity}
-                  onChange={handleChange}
-                  min="1"
-                  step="1"
-                  placeholder="Nombre de pièces"
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  required
-                  disabled={loading}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Entrez le nombre de pièces à ajouter au stock
-                </p>
-              </div>
+              {form.unit !== product.unit && (
+                <div className="mt-3 pt-3 border-t border-green-200 text-sm text-green-700">
+                  💡 La quantité sera automatiquement convertie de {form.unit} en{" "}
+                  {product.unit}
+                </div>
+              )}
+            </div>
+          )}
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                  disabled={loading}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={loading || !form.variantId || form.quantity <= 0}
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Traitement...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      Valider l'approvisionnement
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <div className="text-center p-8">
-            <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-600 mb-2">Ce produit n'a pas de variantes</p>
-            <p className="text-sm text-gray-500 mb-4">
-              Vous devez d'abord créer des variantes pour pouvoir les approvisionner.
-            </p>
+          {/* Boutons */}
+          <div className="flex justify-end gap-3 pt-4 border-t">
             <button
+              type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              className="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              disabled={loading}
             >
-              Fermer
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className={`px-5 py-2 rounded-lg text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${modeAppro === "direct"
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              disabled={
+                loading ||
+                form.quantity <= 0 ||
+                (modeAppro === "transfert" && !form.boutiqueSrcId)
+              }
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Traitement...
+                </>
+              ) : (
+                <>
+                  {modeAppro === "direct" ? (
+                    <Plus className="w-4 h-4" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
+                  {modeAppro === "direct"
+                    ? "Valider l'approvisionnement"
+                    : "Valider le transfert"}
+                </>
+              )}
             </button>
           </div>
-        )}
+        </form>
       </motion.div>
     </div>
   );

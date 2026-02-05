@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Edit, Trash2, Package, Eye, Tag, Store } from "lucide-react";
+import { Plus, Edit, Trash2, Package, Eye, Store } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ProductModal from "./ProductModal";
 import ApprovisionnementModal from "./ApprovisionnementModal";
@@ -23,7 +23,7 @@ const ProductsPage = ({ products, onRefresh }) => {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Voulez-vous vraiment supprimer ce produit et toutes ses variantes ?")) return;
+    if (!confirm("Voulez-vous vraiment supprimer ce produit ?")) return;
 
     const res = await deleteProduit(id);
 
@@ -45,28 +45,19 @@ const ProductsPage = ({ products, onRefresh }) => {
     setDetailModalOpen(true);
   };
 
-  // Fonction pour calculer le prix minimum parmi les variantes
-  const getMinPrice = (variants) => {
-    if (!variants || variants.length === 0) return 0;
-    return Math.min(...variants.map((v) => v.price));
+  // ✅ Fonction pour obtenir le stock total (simplifié)
+  const getStockTotal = (products) => {
+    return products.reduce((total, product) => total + (product.stock || 0), 0);
   };
 
-  // Fonction pour calculer le prix maximum parmi les variantes
-  const getMaxPrice = (variants) => {
-    if (!variants || variants.length === 0) return 0;
-    return Math.max(...variants.map((v) => v.price));
+  // ✅ Fonction pour compter les produits avec stock faible
+  const getLowStockCount = (products) => {
+    return products.filter(p => p.stock < 10).length;
   };
 
-  // Fonction pour obtenir le stock total (somme des stocks de toutes les variantes)
-  const getStockTotal = (product) => {
-    if (!product.variants || product.variants.length === 0) return 0;
-    return product.variants.reduce((total, variant) => total + variant.stock, 0);
-  };
-
-  // Fonction pour obtenir le nombre de variantes avec stock faible (<5)
-  const getLowStockCount = (product) => {
-    if (!product.variants) return 0;
-    return product.variants.filter(v => v.stock < 5).length;
+  // ✅ Fonction pour compter les produits épuisés
+  const getOutOfStockCount = (products) => {
+    return products.filter(p => p.stock === 0).length;
   };
 
   return (
@@ -78,8 +69,7 @@ const ProductsPage = ({ products, onRefresh }) => {
             Gestion des produits
           </h1>
           <p className="text-gray-600 mt-1">
-            {products.length} produit{products.length > 1 ? "s" : ""} •
-            {products.reduce((total, product) => total + (product.variants?.length || 0), 0)} variante{products.reduce((total, product) => total + (product.variants?.length || 0), 0) > 1 ? "s" : ""}
+            {products.length} produit{products.length > 1 ? "s" : ""} enregistré{products.length > 1 ? "s" : ""}
           </p>
         </div>
         <button
@@ -98,21 +88,21 @@ const ProductsPage = ({ products, onRefresh }) => {
           <div className="text-2xl font-bold text-blue-600">{products.length}</div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="text-sm text-gray-600">Variantes total</div>
-          <div className="text-2xl font-bold text-purple-600">
-            {products.reduce((total, product) => total + (product.variants?.length || 0), 0)}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow border">
           <div className="text-sm text-gray-600">Stock total global</div>
           <div className="text-2xl font-bold text-green-600">
-            {products.reduce((total, product) => total + getStockTotal(product), 0)}
+            {getStockTotal(products)}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="text-sm text-gray-600">Variantes faible stock</div>
+          <div className="text-sm text-gray-600">Stock faible (&lt;10)</div>
           <div className="text-2xl font-bold text-amber-600">
-            {products.reduce((total, product) => total + getLowStockCount(product), 0)}
+            {getLowStockCount(products)}
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow border">
+          <div className="text-sm text-gray-600">Produits épuisés</div>
+          <div className="text-2xl font-bold text-red-600">
+            {getOutOfStockCount(products)}
           </div>
         </div>
       </div>
@@ -133,13 +123,10 @@ const ProductsPage = ({ products, onRefresh }) => {
                   Catégorie
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Variantes
+                  Prix unitaire
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Gamme de prix
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Stock total
+                  Stock
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Statut
@@ -154,7 +141,7 @@ const ProductsPage = ({ products, onRefresh }) => {
               {products.length === 0 ? (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan="7"
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -172,11 +159,6 @@ const ProductsPage = ({ products, onRefresh }) => {
               ) : (
                 <AnimatePresence>
                   {products.map((product) => {
-                    const stockTotal = getStockTotal(product);
-                    const lowStockCount = getLowStockCount(product);
-                    const minPrice = getMinPrice(product.variants);
-                    const maxPrice = getMaxPrice(product.variants);
-
                     return (
                       <motion.tr
                         key={product._id}
@@ -185,6 +167,7 @@ const ProductsPage = ({ products, onRefresh }) => {
                         exit={{ opacity: 0, y: 10 }}
                         className="hover:bg-gray-50 transition-colors"
                       >
+                        {/* PRODUIT */}
                         <td className="px-6 py-4">
                           <div className="font-medium text-gray-900">
                             {product.name}
@@ -196,7 +179,7 @@ const ProductsPage = ({ products, onRefresh }) => {
                           )}
                         </td>
 
-                        {/* ✅ NOUVELLE COLONNE BOUTIQUE */}
+                        {/* BOUTIQUE */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <Store className="w-4 h-4 text-indigo-500" />
@@ -213,85 +196,52 @@ const ProductsPage = ({ products, onRefresh }) => {
                           </div>
                         </td>
 
+                        {/* CATÉGORIE */}
                         <td className="px-6 py-4">
                           <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
                             {product.category || "Non défini"}
                           </span>
                         </td>
 
+                        {/* PRIX UNITAIRE */}
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <Tag className="w-4 h-4 text-purple-500" />
-                            <span className="text-gray-900 font-medium">
-                              {product.variants?.length || 0}
-                            </span>
-                            <span className="text-gray-500 text-sm">
-                              variante{product.variants?.length > 1 ? 's' : ''}
-                            </span>
+                          <div className="space-y-1">
+                            <div className="font-semibold text-green-700">
+                              {product.basePrice?.toLocaleString()} FCFA
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              par {product.unit || 'unité'}
+                            </div>
                           </div>
-                          {product.variants && product.variants.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {product.variants.slice(0, 2).map(v => v.name).join(', ')}
-                              {product.variants.length > 2 && '...'}
-                            </div>
-                          )}
                         </td>
 
-                        <td className="px-6 py-4">
-                          {product.variants?.length > 0 ? (
-                            <div className="space-y-1">
-                              <div className="font-semibold text-green-700">
-                                {minPrice === maxPrice
-                                  ? `${minPrice.toLocaleString()} FCFA`
-                                  : `${minPrice.toLocaleString()} - ${maxPrice.toLocaleString()} FCFA`
-                                }
-                              </div>
-                              {product.variants.length === 1 ? (
-                                <div className="text-xs text-gray-500">1 prix unique</div>
-                              ) : (
-                                <div className="text-xs text-gray-500">{product.variants.length} prix différents</div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 text-sm">Non défini</span>
-                          )}
-                        </td>
-
+                        {/* STOCK */}
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             <span
-                              className={`px-3 py-1 text-sm font-medium rounded-full inline-block ${stockTotal === 0
-                                ? "bg-red-100 text-red-800"
-                                : stockTotal < 10
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-green-100 text-green-800"
+                              className={`px-3 py-1 text-sm font-medium rounded-full inline-block ${product.stock === 0
+                                  ? "bg-red-100 text-red-800"
+                                  : product.stock < 10
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-green-100 text-green-800"
                                 }`}
                             >
-                              {stockTotal} pièce(s)
+                              {product.stock} {product.unit || 'unité'}
                             </span>
-                            {product.variants && product.variants.length > 1 && (
-                              <div className="text-xs text-gray-500">
-                                Sur {product.variants.length} variante{product.variants.length > 1 ? 's' : ''}
-                              </div>
-                            )}
                           </div>
                         </td>
 
+                        {/* STATUT */}
                         <td className="px-6 py-4">
                           <div className="space-y-2">
-                            {stockTotal === 0 ? (
+                            {product.stock === 0 ? (
                               <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded">
                                 Épuisé
                               </span>
-                            ) : lowStockCount > 0 ? (
-                              <div>
-                                <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
-                                  Stock faible
-                                </span>
-                                <div className="text-xs text-amber-600 mt-1">
-                                  {lowStockCount} variante{lowStockCount > 1 ? 's' : ''}
-                                </div>
-                              </div>
+                            ) : product.stock < 10 ? (
+                              <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
+                                Stock faible
+                              </span>
                             ) : (
                               <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded">
                                 En stock
@@ -300,6 +250,7 @@ const ProductsPage = ({ products, onRefresh }) => {
                           </div>
                         </td>
 
+                        {/* ACTIONS */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-2">
                             {/* Ligne 1 : Modifier et Détails */}
@@ -360,9 +311,8 @@ const ProductsPage = ({ products, onRefresh }) => {
         isOpen={isProductModalOpen}
         onClose={() => {
           setProductModalOpen(false);
-           setActiveProduct(null);
+          setActiveProduct(null);
           onRefresh?.();
-          
         }}
         product={activeProduct}
       />
@@ -372,7 +322,7 @@ const ProductsPage = ({ products, onRefresh }) => {
         isOpen={isApprovisionnementModalOpen}
         onClose={() => {
           setApprovisionnementModalOpen(false);
-           setActiveProduct(null);
+          setActiveProduct(null);
           onRefresh?.();
         }}
         product={activeProduct}
@@ -383,8 +333,6 @@ const ProductsPage = ({ products, onRefresh }) => {
         isOpen={isDetailModalOpen}
         onClose={() => setDetailModalOpen(false)}
         product={activeProduct}
-        
-        
       />
     </div>
   );

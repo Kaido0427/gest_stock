@@ -84,50 +84,41 @@ export async function deleteProduit(id) {
   }
 }
 
-// ➤ 6. Approvisionner une VARIANTE spécifique
-export async function approvisionnerVariant(produitId, variantId, quantity) {
+// services/product.js
+
+// ... autres fonctions existantes ...
+
+// ✅ Approvisionner un produit (approvisionnement direct)
+export const approvisionnerProduit = async (productId, data) => {
   try {
-    const res = await fetch(`${API_URL}/${produitId}/approvisionner`, {
+    const res = await fetch(`${API_URL}/products/${productId}/approvisionner`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        variantId,
-        quantity
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
 
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur approvisionnement" };
-
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
+    return await res.json();
+  } catch (error) {
+    console.error("Erreur approvisionnerProduit:", error);
+    return { error: error.message };
   }
-}
+};
 
-// ➤ 7. Supprimer une variante
-export async function deleteVariant(produitId, variantId) {
+// ✅ Transfert de stock entre boutiques
+export const transfertStockBoutiques = async (data) => {
   try {
-    const res = await fetch(`${API_URL}/${produitId}/variant`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        variantId
-      }),
+    const res = await fetch(`${API_URL}/products/transfert-stock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
     });
 
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur suppression variante" };
-
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
+    return await res.json();
+  } catch (error) {
+    console.error("Erreur transfertStockBoutiques:", error);
+    return { error: error.message };
   }
-}
+};
 
 // ➤ 8. Fonction helper pour ajouter une nouvelle variante à un produit existant
 export async function addVariantToProduit(produitId, nouvelleVariante) {

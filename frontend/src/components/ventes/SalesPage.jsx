@@ -2,21 +2,22 @@
 import React, { useState } from "react";
 import {
   Search, Package, ShoppingCart,
-  Receipt, Plus, Minus, X, Filter
+  Receipt, Plus, Minus, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { vendreProduit } from "../../services/sale";
-import VariantSelector from "../../components/ventes/VariantSelector";
+import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
 
-const SalesPage = ({ products,onRefreshProducts }) => {
+const SalesPage = ({ products, onRefreshProducts }) => {
   // États
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tous");
   const [cart, setCart] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Catégories uniques
@@ -26,66 +27,80 @@ const SalesPage = ({ products,onRefreshProducts }) => {
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === "Tous" || product.category === selectedCategory;
-    const hasVariants = product.variants && product.variants.length > 0;
-    return matchesSearch && matchesCategory && hasVariants;
+    const hasStock = product.stock > 0;
+    return matchesSearch && matchesCategory && hasStock;
   });
+
+  // Unités disponibles selon le produit
+  const getAvailableUnits = (baseUnit) => {
+    const liquidUnits = ["L", "cL", "mL", "kL"];
+    const weightUnits = ["kg", "g", "mg", "t"];
+
+    if (liquidUnits.includes(baseUnit)) {
+      return liquidUnits;
+    } else if (weightUnits.includes(baseUnit)) {
+      return weightUnits;
+    }
+    return [baseUnit];
+  };
+
+  // Calculer le prix estimé
+  const calculateEstimatedPrice = () => {
+    if (!selectedProduct || !quantity || quantity <= 0) return 0;
+
+    if (customPrice && parseFloat(customPrice) > 0) {
+      return parseFloat(customPrice);
+    }
+
+    // Conversion simplifiée pour estimation (le backend fera la conversion exacte)
+    const unitToUse = selectedUnit || selectedProduct.unit;
+    return selectedProduct.basePrice * quantity;
+  };
 
   // Ajouter au panier
   const handleAddToCart = () => {
-    if (!selectedVariant || quantity <= 0) {
-      alert("Veuillez sélectionner une variante et une quantité");
+    if (!selectedProduct || quantity <= 0) {
+      alert("Veuillez sélectionner un produit et une quantité");
       return;
     }
 
+    const estimatedPrice = calculateEstimatedPrice();
+    const unitToSell = selectedUnit || selectedProduct.unit;
+
     const cartItem = {
-      id: `${selectedProduct._id}-${selectedVariant._id}`,
+      id: `${selectedProduct._id}-${Date.now()}`,
       productId: selectedProduct._id,
-      variantId: selectedVariant._id,
       productName: selectedProduct.name,
-      variantName: selectedVariant.name,
-      price: selectedVariant.price,
       quantity: quantity,
-      maxStock: selectedVariant.stock
+      unit: unitToSell,
+      baseUnit: selectedProduct.unit,
+      basePrice: selectedProduct.basePrice,
+      estimatedTotal: estimatedPrice,
+      customPrice: customPrice ? parseFloat(customPrice) : null,
+      maxStock: selectedProduct.stock
     };
 
-    // Vérifier si l'item existe déjà dans le panier
-    const existingIndex = cart.findIndex(item => item.id === cartItem.id);
-
-    if (existingIndex >= 0) {
-      // Mettre à jour la quantité
-      const newCart = [...cart];
-      const newQuantity = newCart[existingIndex].quantity + quantity;
-
-      if (newQuantity > selectedVariant.stock) {
-        alert(`Quantité maximale dépassée. Stock disponible: ${selectedVariant.stock}`);
-        return;
-      }
-
-      newCart[existingIndex].quantity = newQuantity;
-      setCart(newCart);
-    } else {
-      // Ajouter un nouvel item
-      setCart([...cart, cartItem]);
-    }
+    setCart([...cart, cartItem]);
 
     // Réinitialiser
-    setSelectedVariant(null);
     setQuantity(1);
+    setCustomPrice("");
+    setSelectedUnit("");
   };
 
   // Mettre à jour la quantité d'un item
   const handleUpdateQuantity = (itemId, newQuantity) => {
     if (newQuantity < 1) return;
 
-    const item = cart.find(item => item.id === itemId);
-    if (newQuantity > item.maxStock) {
-      alert(`Quantité maximale: ${item.maxStock}`);
-      return;
-    }
-
-    setCart(cart.map(item =>
-      item.id === itemId ? { ...item, quantity: newQuantity } : item
-    ));
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const newTotal = item.customPrice
+          ? item.customPrice
+          : item.basePrice * newQuantity;
+        return { ...item, quantity: newQuantity, estimatedTotal: newTotal };
+      }
+      return item;
+    }));
   };
 
   // Retirer un item du panier
@@ -102,69 +117,67 @@ const SalesPage = ({ products,onRefreshProducts }) => {
   };
 
   // Valider la vente
-const handleCheckout = async () => {
-  if (cart.length === 0) {
-    alert("Le panier est vide");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    // 1) vérification stocks locale
-    for (const item of cart) {
-      const product = products.find(p => p._id === item.productId);
-      const variant = product?.variants?.find(v => v._id && v._id.toString() === item.variantId);
-      if (!variant) {
-        alert(`Variante "${item.variantName}" introuvable`);
-        setLoading(false);
-        return;
-      }
-      if (variant.stock < item.quantity) {
-        alert(`Stock insuffisant pour "${item.variantName}". Stock disponible: ${variant.stock}`);
-        setLoading(false);
-        return;
-      }
+  const handleCheckout = async () => {
+    if (cart.length === 0) {
+      alert("Le panier est vide");
+      return;
     }
 
-    // 2) envoi des ventes (log detailed)
-    for (const item of cart) {
-      console.log("[Checkout] vendreProduit ->", {
-        productId: item.productId,
-        variantId: item.variantId,
-        quantity: item.quantity
-      });
+    setLoading(true);
 
-      const result = await vendreProduit(item.productId, item.variantId, item.quantity);
-      console.log("[Checkout] result vendreProduit:", result);
+    try {
+      // Envoyer chaque vente
+      for (const item of cart) {
+        console.log("[Checkout] vendreProduit ->", {
+          productId: item.productId,
+          quantity: item.quantity,
+          unit: item.unit,
+          customPrice: item.customPrice
+        });
 
-      // si venderProduit renvoie { error: '...' } -> on lance une exception pour aller au catch central
-      if (result && result.error) {
-        throw new Error(result.error || "Erreur inconnue serveur");
+        const result = await vendreProduit(
+          item.productId,
+          item.quantity,
+          item.unit,
+          item.customPrice
+        );
+
+        console.log("[Checkout] result vendreProduit:", result);
+
+        if (result && result.error) {
+          throw new Error(result.error || "Erreur inconnue serveur");
+        }
       }
+
+      // Récapitulatif
+      const totalAmount = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
+      const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+      alert(
+        `✅ Vente validée avec succès !\n\n` +
+        `Articles vendus: ${itemsCount}\n` +
+        `Montant total: ${totalAmount.toLocaleString()} FCFA\n\n` +
+        `Les stocks ont été mis à jour.`
+      );
+
+      setCart([]);
+
+      if (onRefreshProducts) {
+        await onRefreshProducts();
+      }
+    } catch (error) {
+      console.error("[Checkout] erreur complète:", error);
+      alert(
+        "Erreur lors de la validation de la vente — détail: " +
+        (error?.message || JSON.stringify(error))
+      );
+    } finally {
+      setLoading(false);
     }
-
-    // 3) récap et nettoyage
-    const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-    alert(`✅ Vente validée avec succès !\n\nArticles vendus: ${itemsCount}\nMontant total: ${totalAmount.toLocaleString()} FCFA\n\nLes stocks ont été mis à jour.`);
-    setCart([]);
-     if (onRefreshProducts) {
-      await onRefreshProducts();
-    }
-  } catch (error) {
-    // affichage plus utile — montre le message précis
-    console.error("[Checkout] erreur complète:", error);
-    alert("Erreur lors de la validation de la vente — détail: " + (error?.message || JSON.stringify(error)));
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   // Calculer le total
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
   const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -197,30 +210,18 @@ const handleCheckout = async () => {
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-                <button
-                  onClick={() => setSelectedCategory("Tous")}
-                  className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === "Tous"
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                >
-                  Tous
-                </button>
-                {categories
-                  .filter(cat => cat !== "Tous")
-                  .map(category => (
-                    <button
-                      key={category}
-                      onClick={() => setSelectedCategory(category)}
-                      className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === category
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                      {category}
-                    </button>
-                  ))
-                }
+                {categories.map(category => (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === category
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    {category}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -240,48 +241,17 @@ const handleCheckout = async () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <AnimatePresence>
                   {filteredProducts.map((product) => (
-                    <motion.div
+                    <ProductSelector
                       key={product._id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedProduct?._id === product._id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
-                        }`}
-                      onClick={() => {
+                      product={product}
+                      isSelected={selectedProduct?._id === product._id}
+                      onSelect={() => {
                         setSelectedProduct(product);
-                        setSelectedVariant(null);
                         setQuantity(1);
+                        setSelectedUnit(product.unit);
+                        setCustomPrice("");
                       }}
-                    >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                          <Package className="w-6 h-6 text-blue-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-800 text-sm mb-1">
-                            {product.name}
-                          </h3>
-                          {product.category && (
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                              {product.category}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-sm text-gray-600">
-                          {product.variants?.length || 0} variante{product.variants?.length > 1 ? 's' : ''}
-                        </div>
-                        {product.variants && product.variants.some(v => v.stock < 5) && (
-                          <div className="text-xs text-amber-600">
-                            ⚠ Certaines variantes ont un stock faible
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
+                    />
                   ))}
                 </AnimatePresence>
               </div>
@@ -384,10 +354,7 @@ const handleCheckout = async () => {
                   {selectedProduct.name}
                 </h2>
                 <button
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    setSelectedVariant(null);
-                  }}
+                  onClick={() => setSelectedProduct(null)}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="w-4 h-4" />
@@ -395,76 +362,107 @@ const handleCheckout = async () => {
               </div>
 
               <div className="space-y-4">
-                {/* Sélection de la variante */}
+                {/* Info stock */}
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-sm text-gray-600">Stock disponible</div>
+                  <div className="text-lg font-bold text-blue-700">
+                    {selectedProduct.stock} {selectedProduct.unit}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Prix: {selectedProduct.basePrice.toLocaleString()} FCFA / {selectedProduct.unit}
+                  </div>
+                </div>
+
+                {/* Sélection de l'unité */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Sélectionner la variante
+                    Unité de vente
                   </label>
-                  <VariantSelector
-                    product={selectedProduct}
-                    onSelectVariant={setSelectedVariant}
-                    selectedVariant={selectedVariant}
+                  <select
+                    value={selectedUnit}
+                    onChange={(e) => setSelectedUnit(e.target.value)}
+                    className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {getAvailableUnits(selectedProduct.unit).map(unit => (
+                      <option key={unit} value={unit}>
+                        {unit} {unit === selectedProduct.unit && "(base)"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quantité */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantité
+                  </label>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <button
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      disabled={quantity <= 1}
+                      className={`p-2 rounded-lg ${quantity <= 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => setQuantity(Math.max(1, parseFloat(e.target.value) || 1))}
+                      className="w-20 text-center text-2xl font-bold text-gray-800 bg-transparent"
+                      step="0.01"
+                    />
+
+                    <button
+                      onClick={() => setQuantity(quantity + 1)}
+                      className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Prix personnalisé */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Prix personnalisé (optionnel)
+                  </label>
+                  <input
+                    type="number"
+                    value={customPrice}
+                    onChange={(e) => setCustomPrice(e.target.value)}
+                    placeholder="Laisser vide pour calcul auto"
+                    className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    step="1"
                   />
                 </div>
 
-                {/* Sélection de la quantité */}
-                {selectedVariant && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Quantité
-                      </label>
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <button
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                          disabled={quantity <= 1}
-                          className={`p-2 rounded-lg ${quantity <= 1
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-
-                        <div className="text-center">
-                          <div className="text-2xl font-bold text-gray-800">{quantity}</div>
-                          <div className="text-xs text-gray-500">
-                            sur {selectedVariant.stock} disponibles
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => setQuantity(Math.min(selectedVariant.stock, quantity + 1))}
-                          disabled={quantity >= selectedVariant.stock}
-                          className={`p-2 rounded-lg ${quantity >= selectedVariant.stock
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
+                {/* Total estimé */}
+                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-700">Total estimé</span>
+                    <span className="text-xl font-bold text-green-700">
+                      {calculateEstimatedPrice().toLocaleString()} FCFA
+                    </span>
+                  </div>
+                  {selectedUnit !== selectedProduct.unit && (
+                    <div className="text-xs text-green-600 mt-1">
+                      La conversion sera faite automatiquement
                     </div>
+                  )}
+                </div>
 
-                    {/* Total et bouton ajouter */}
-                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">Total</span>
-                        <span className="text-xl font-bold text-green-700">
-                          {(selectedVariant.price * quantity).toLocaleString()} FCFA
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleAddToCart}
-                      className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Ajouter au panier
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={handleAddToCart}
+                  disabled={!selectedProduct || quantity <= 0}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Ajouter au panier
+                </button>
               </div>
             </div>
           )}
