@@ -15,12 +15,14 @@ const DashboardPage = () => {
   const [alertes, setAlertes] = useState([]);
   const [topProduits, setTopProduits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
 
   // Charger l'utilisateur et ses boutiques
   useEffect(() => {
     const loadUser = async () => {
       try {
         const currentUser = await getCurrentUser();
+        console.log("👤 User loaded:", currentUser);
         
         if (!currentUser) {
           setLoading(false);
@@ -30,26 +32,37 @@ const DashboardPage = () => {
         setUser(currentUser);
 
         // Charger les boutiques
+        console.log("🏪 Loading boutiques...");
         const boutiquesData = await getBoutiques();
+        console.log("🏪 Boutiques response:", boutiquesData);
 
-        if (boutiquesData && boutiquesData.success && boutiquesData.data) {
+        if (boutiquesData?.success && boutiquesData?.data) {
           const boutiquesArray = boutiquesData.data;
+          console.log(`✅ ${boutiquesArray.length} boutique(s) loaded`);
           
           if (currentUser.role === "admin") {
-            // Admin : toutes les boutiques disponibles
+            // Admin : toutes les boutiques
             setBoutiques(boutiquesArray);
+            console.log("👨‍💼 Admin mode - All boutiques available");
           } else if (currentUser.role === "employe" && currentUser.boutique) {
             // Employé : uniquement sa boutique
             const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
             
             if (maBoutique) {
+              console.log("👷 Employee mode - Boutique found:", maBoutique.name);
               setBoutiques([maBoutique]);
               setSelectedBoutique(maBoutique);
+            } else {
+              console.warn("⚠️ Employee's boutique not found in list");
             }
           }
+        } else {
+          console.error("❌ Failed to load boutiques:", boutiquesData);
         }
+        
+        setLoading(false);
       } catch (error) {
-        console.error("🔥 Erreur loadUser:", error);
+        console.error("🔥 Error loadUser:", error);
         setLoading(false);
       }
     };
@@ -58,34 +71,42 @@ const DashboardPage = () => {
   }, []);
 
   const fetchData = async () => {
-    if (!user) return;
+    if (!user) {
+      console.warn("⚠️ fetchData called without user");
+      return;
+    }
 
-    setLoading(true);
+    setLoadingData(true);
     
     try {
       // Déterminer l'ID de la boutique à filtrer
       let boutiqueId = null;
       
       if (user.role === "employe" && user.boutique) {
-        // Employé : toujours filtrer par sa boutique
         boutiqueId = user.boutique.id;
+        console.log("👷 Employee - Filtering by boutique:", boutiqueId);
       } else if (user.role === "admin" && selectedBoutique) {
-        // Admin : filtrer par la boutique sélectionnée
         boutiqueId = selectedBoutique._id;
+        console.log("👨‍💼 Admin - Filtering by selected boutique:", boutiqueId);
+      } else {
+        console.log("👨‍💼 Admin - No filter (all boutiques)");
       }
-      // Si admin sans boutique sélectionnée : boutiqueId reste null = toutes les boutiques
+
+      console.log("📊 Fetching data with boutiqueId:", boutiqueId);
 
       // Charger les statistiques du jour
       const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
+      console.log("📈 Stats jour:", statsJourData);
       
       // Charger les statistiques du mois
       const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
+      console.log("📈 Stats mois:", statsMoisData);
 
-      if (statsJourData.success && statsMoisData.success) {
+      if (statsJourData?.success && statsMoisData?.success) {
         const globalJour = statsJourData.data?.global || {};
         const globalMois = statsMoisData.data?.global || {};
         
-        setStats({
+        const newStats = {
           today: { 
             sales: globalJour.montantTotal || 0, 
             transactions: globalJour.totalVentes || 0 
@@ -94,15 +115,18 @@ const DashboardPage = () => {
             sales: globalMois.montantTotal || 0, 
             transactions: globalMois.totalVentes || 0 
           }
-        });
+        };
         
+        console.log("📊 Setting stats:", newStats);
+        setStats(newStats);
         setTopProduits(statsJourData.data?.topProduits || []);
       }
 
       // Charger l'historique des ventes
       const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
+      console.log("🛒 Ventes récentes:", ventesData);
       
-      if (ventesData.success) {
+      if (ventesData?.success) {
         const ventes = (ventesData.data?.ventes || []).map(v => ({
           id: v._id,
           date: new Date(v.date).toLocaleString('fr-FR', {
@@ -114,30 +138,34 @@ const DashboardPage = () => {
           items: (v.items || []).reduce((sum, i) => sum + (i.quantitySold || i.quantity || 0), 0),
           total: v.totalAmount || 0
         }));
+        console.log("✅ Ventes processed:", ventes);
         setSales(ventes);
       }
 
       // Charger les alertes stock
       const alertesData = await getAlertesStock(10, boutiqueId);
+      console.log("⚠️ Alertes stock:", alertesData);
       
-      if (alertesData.success) {
+      if (alertesData?.success) {
         setAlertes(alertesData.data || []);
       }
 
     } catch (error) {
-      console.error("🔥 Erreur fetchData:", error);
+      console.error("🔥 Error fetchData:", error);
     } finally {
-      setLoading(false);
+      setLoadingData(false);
     }
   };
 
+  // Charger les données quand user ou selectedBoutique change
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
+      console.log("🔄 Trigger fetchData - user:", user.role, "boutique:", selectedBoutique?.name || "All");
       fetchData();
     }
-  }, [user, selectedBoutique]);
+  }, [user, selectedBoutique, loading]);
 
-  if (loading && !user) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -160,9 +188,9 @@ const DashboardPage = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Tableau de bord</h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+            <Store className="w-4 h-4" />
             {selectedBoutique ? (
               <>
-                <Store className="w-4 h-4" />
                 {selectedBoutique.name}
                 {user.role === "employe" && (
                   <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
@@ -171,23 +199,19 @@ const DashboardPage = () => {
                 )}
               </>
             ) : (
-              user.role === "admin" && (
-                <>
-                  <Store className="w-4 h-4" />
-                  Toutes les boutiques
-                </>
-              )
+              user.role === "admin" && "Toutes les boutiques"
             )}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* Sélecteur de boutique (ADMIN uniquement) */}
-          {user.role === "admin" && boutiques.length > 0 && (
+          {user.role === "admin" && (
             <div className="relative min-w-[200px]">
               <select
                 value={selectedBoutique?._id || ""}
                 onChange={(e) => {
+                  console.log("🔄 Boutique selection changed:", e.target.value);
                   const boutique = e.target.value 
                     ? boutiques.find(b => b._id === e.target.value)
                     : null;
@@ -209,10 +233,10 @@ const DashboardPage = () => {
           {/* Bouton actualiser */}
           <button
             onClick={fetchData}
-            disabled={loading}
+            disabled={loadingData}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin' : ''}`} />
             Actualiser
           </button>
         </div>
@@ -223,13 +247,13 @@ const DashboardPage = () => {
         {/* Ventes du jour */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <p className="text-blue-100 text-sm font-medium">Ventes du jour</p>
               <h3 className="text-3xl font-bold mt-2">
                 {stats.today.sales.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-blue-100 text-sm mt-2">
-                {stats.today.transactions} transaction{stats.today.transactions > 1 ? 's' : ''}
+                {stats.today.transactions} transaction{stats.today.transactions !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -241,13 +265,13 @@ const DashboardPage = () => {
         {/* Ventes du mois */}
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <p className="text-green-100 text-sm font-medium">Ventes du mois</p>
               <h3 className="text-3xl font-bold mt-2">
                 {stats.month.sales.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-green-100 text-sm mt-2">
-                {stats.month.transactions} transaction{stats.month.transactions > 1 ? 's' : ''}
+                {stats.month.transactions} transaction{stats.month.transactions !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -259,13 +283,13 @@ const DashboardPage = () => {
         {/* Quantité vendue */}
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <p className="text-purple-100 text-sm font-medium">Quantité vendue</p>
               <h3 className="text-3xl font-bold mt-2">
                 {topProduits.reduce((sum, p) => sum + (p.quantiteVendue || 0), 0)}
               </h3>
               <p className="text-purple-100 text-sm mt-2">
-                {topProduits.length} produit{topProduits.length > 1 ? 's' : ''}
+                {topProduits.length} produit{topProduits.length !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -301,7 +325,7 @@ const DashboardPage = () => {
                       {sale.date}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {sale.items} article{sale.items > 1 ? 's' : ''}
+                      {sale.items} article{sale.items !== 1 ? 's' : ''}
                     </p>
                   </div>
                   <p className="font-bold text-lg text-green-600">
