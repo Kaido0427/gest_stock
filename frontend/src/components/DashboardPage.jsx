@@ -7,9 +7,9 @@ const DashboardPage = () => {
   const [user, setUser] = useState(null);
   const [boutiques, setBoutiques] = useState([]);
   const [selectedBoutique, setSelectedBoutique] = useState(null);
-  const [stats, setStats] = useState({ 
-    today: { sales: 0, transactions: 0 }, 
-    month: { sales: 0, transactions: 0 } 
+  const [stats, setStats] = useState({
+    today: { sales: 0, transactions: 0 },
+    month: { sales: 0, transactions: 0 }
   });
   const [sales, setSales] = useState([]);
   const [alertes, setAlertes] = useState([]);
@@ -17,13 +17,14 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
-  // Charger l'utilisateur et ses boutiques
+  // DashboardPage.jsx - Section de chargement des boutiques (ligne ~40-65)
+
   useEffect(() => {
     const loadUser = async () => {
       try {
         const currentUser = await getCurrentUser();
         console.log("👤 User loaded:", currentUser);
-        
+
         if (!currentUser) {
           setLoading(false);
           return;
@@ -36,10 +37,23 @@ const DashboardPage = () => {
         const boutiquesData = await getBoutiques();
         console.log("🏪 Boutiques response:", boutiquesData);
 
-        if (boutiquesData?.success && boutiquesData?.data) {
-          const boutiquesArray = boutiquesData.data;
-          console.log(`✅ ${boutiquesArray.length} boutique(s) loaded`);
-          
+        // ✅ FIX: Gérer les deux formats de réponse possibles
+        let boutiquesArray = [];
+
+        if (Array.isArray(boutiquesData)) {
+          // Format: tableau direct
+          boutiquesArray = boutiquesData;
+        } else if (boutiquesData?.success && boutiquesData?.data) {
+          // Format: { success: true, data: [...] }
+          boutiquesArray = boutiquesData.data;
+        } else if (boutiquesData?.data && Array.isArray(boutiquesData.data)) {
+          // Format alternatif: { data: [...] }
+          boutiquesArray = boutiquesData.data;
+        }
+
+        console.log(`✅ ${boutiquesArray.length} boutique(s) loaded`);
+
+        if (boutiquesArray.length > 0) {
           if (currentUser.role === "admin") {
             // Admin : toutes les boutiques
             setBoutiques(boutiquesArray);
@@ -47,7 +61,7 @@ const DashboardPage = () => {
           } else if (currentUser.role === "employe" && currentUser.boutique) {
             // Employé : uniquement sa boutique
             const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
-            
+
             if (maBoutique) {
               console.log("👷 Employee mode - Boutique found:", maBoutique.name);
               setBoutiques([maBoutique]);
@@ -57,19 +71,18 @@ const DashboardPage = () => {
             }
           }
         } else {
-          console.error("❌ Failed to load boutiques:", boutiquesData);
+          console.warn("⚠️ No boutiques found");
         }
-        
+
         setLoading(false);
       } catch (error) {
         console.error("🔥 Error loadUser:", error);
         setLoading(false);
       }
     };
-    
+
     loadUser();
   }, []);
-
   const fetchData = async () => {
     if (!user) {
       console.warn("⚠️ fetchData called without user");
@@ -77,11 +90,11 @@ const DashboardPage = () => {
     }
 
     setLoadingData(true);
-    
+
     try {
       // Déterminer l'ID de la boutique à filtrer
       let boutiqueId = null;
-      
+
       if (user.role === "employe" && user.boutique) {
         boutiqueId = user.boutique.id;
         console.log("👷 Employee - Filtering by boutique:", boutiqueId);
@@ -97,7 +110,7 @@ const DashboardPage = () => {
       // Charger les statistiques du jour
       const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
       console.log("📈 Stats jour:", statsJourData);
-      
+
       // Charger les statistiques du mois
       const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
       console.log("📈 Stats mois:", statsMoisData);
@@ -105,18 +118,18 @@ const DashboardPage = () => {
       if (statsJourData?.success && statsMoisData?.success) {
         const globalJour = statsJourData.data?.global || {};
         const globalMois = statsMoisData.data?.global || {};
-        
+
         const newStats = {
-          today: { 
-            sales: globalJour.montantTotal || 0, 
-            transactions: globalJour.totalVentes || 0 
+          today: {
+            sales: globalJour.montantTotal || 0,
+            transactions: globalJour.totalVentes || 0
           },
-          month: { 
-            sales: globalMois.montantTotal || 0, 
-            transactions: globalMois.totalVentes || 0 
+          month: {
+            sales: globalMois.montantTotal || 0,
+            transactions: globalMois.totalVentes || 0
           }
         };
-        
+
         console.log("📊 Setting stats:", newStats);
         setStats(newStats);
         setTopProduits(statsJourData.data?.topProduits || []);
@@ -125,7 +138,7 @@ const DashboardPage = () => {
       // Charger l'historique des ventes
       const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
       console.log("🛒 Ventes récentes:", ventesData);
-      
+
       if (ventesData?.success) {
         const ventes = (ventesData.data?.ventes || []).map(v => ({
           id: v._id,
@@ -145,7 +158,7 @@ const DashboardPage = () => {
       // Charger les alertes stock
       const alertesData = await getAlertesStock(10, boutiqueId);
       console.log("⚠️ Alertes stock:", alertesData);
-      
+
       if (alertesData?.success) {
         setAlertes(alertesData.data || []);
       }
@@ -212,7 +225,7 @@ const DashboardPage = () => {
                 value={selectedBoutique?._id || ""}
                 onChange={(e) => {
                   console.log("🔄 Boutique selection changed:", e.target.value);
-                  const boutique = e.target.value 
+                  const boutique = e.target.value
                     ? boutiques.find(b => b._id === e.target.value)
                     : null;
                   setSelectedBoutique(boutique);
@@ -316,8 +329,8 @@ const DashboardPage = () => {
               </div>
             ) : (
               sales.map(sale => (
-                <div 
-                  key={sale.id} 
+                <div
+                  key={sale.id}
                   className="flex justify-between items-center p-4 bg-gradient-to-r from-gray-50 to-white border border-gray-100 rounded-lg hover:shadow-md transition-all"
                 >
                   <div>
@@ -352,8 +365,8 @@ const DashboardPage = () => {
               </div>
             ) : (
               alertes.map((a, idx) => (
-                <div 
-                  key={a.produitId || idx} 
+                <div
+                  key={a.produitId || idx}
                   className="flex items-center gap-3 p-4 bg-orange-50 border-l-4 border-orange-500 rounded-lg hover:bg-orange-100 transition-colors"
                 >
                   <div className="p-2 bg-orange-100 rounded-lg">
