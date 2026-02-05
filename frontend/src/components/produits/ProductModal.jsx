@@ -192,7 +192,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 </label>
                 <input
                   name="name"
-                  placeholder="Ex: Huile végétale, Riz, Savon"
+                  placeholder="Ex: Javel 5L, Flacon spray 500mL, Parfum Lavande, Bidon plastique 20L"
                   value={form.name}
                   onChange={handleChange}
                   className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -269,7 +269,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 </label>
                 <textarea
                   name="description"
-                  placeholder="Description du produit"
+                  placeholder="Ex: Eau de javel concentrée 12°, parfum citron - idéal pour désinfection"
                   value={form.description}
                   onChange={handleChange}
                   rows="2"
@@ -302,7 +302,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 <input
                   type="number"
                   name="stock"
-                  placeholder="Ex: 50"
+                  placeholder="Ex: 150"
                   value={form.stock}
                   onChange={handleChange}
                   min="0"
@@ -343,7 +343,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 <input
                   type="number"
                   name="basePrice"
-                  placeholder="Ex: 1500"
+                  placeholder="Ex: 2500"
                   value={form.basePrice}
                   onChange={handleChange}
                   min="0"
