@@ -6,62 +6,121 @@ import { Boutique } from "../models/boutique.model.js";
 
 // ✅ Helper function pour les conversions d'unités
 const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number => {
-    // Si même unité, pas de conversion
     if (fromUnit === toUnit) return quantity;
 
-    // Conversions liquides (tout vers Litre)
     const liquidToLiter: { [key: string]: number } = {
-        'kL': 1000,
-        'L': 1,
-        'cL': 0.01,
-        'mL': 0.001
+        'kL': 1000, 'L': 1, 'cL': 0.01, 'mL': 0.001
     };
 
-    // Conversions poids (tout vers Kilogramme)
     const weightToKg: { [key: string]: number } = {
-        't': 1000,
-        'kg': 1,
-        'g': 0.001,
-        'mg': 0.000001
+        't': 1000, 'kg': 1, 'g': 0.001, 'mg': 0.000001
     };
 
-    // Conversion liquide
     if (liquidToLiter[fromUnit] && liquidToLiter[toUnit]) {
         const inLiters = quantity * liquidToLiter[fromUnit];
         return inLiters / liquidToLiter[toUnit];
     }
 
-    // Conversion poids
     if (weightToKg[fromUnit] && weightToKg[toUnit]) {
         const inKg = quantity * weightToKg[fromUnit];
         return inKg / weightToKg[toUnit];
     }
 
-    // Pour les unités comptables, pas de conversion
     return quantity;
 };
-// ✅ Helper pour calculer le prix selon l'unité de vente
-const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, soldQuantity: number): number => {
-    // Convertir 1 unité vendue en unité de base pour savoir le ratio
-    const unitInBase = convertUnit(1, soldUnit, baseUnit);
-    // Prix unitaire pour l'unité vendue
-    const pricePerSoldUnit = basePrice * unitInBase;
-    // Total
-    return pricePerSoldUnit * soldQuantity;
+
+// ✅ Helper function pour calculer le prix en fonction de l'unité
+const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, quantity: number): number => {
+    const convertedQuantity = convertUnit(quantity, soldUnit, baseUnit);
+    return basePrice * convertedQuantity;
 };
-// ➤ 1. Créer un produit
+
+// ✅ NOUVELLE ROUTE : Créer un produit dans plusieurs boutiques
+export const createProduitMultiBoutiques = async (c: Context) => {
+    try {
+        const body = await c.req.json();
+        const { boutiques, ...produitData } = body;
+
+        // ✅ Validation
+        if (!boutiques || !Array.isArray(boutiques) || boutiques.length === 0) {
+            return c.json({
+                error: "Vous devez sélectionner au moins une boutique"
+            }, 400);
+        }
+
+        if (!produitData.name || !produitData.unit || !produitData.basePrice) {
+            return c.json({
+                error: "Nom, unité et prix de base sont requis"
+            }, 400);
+        }
+
+        if (produitData.basePrice <= 0) {
+            return c.json({
+                error: "Le prix de base doit être supérieur à 0"
+            }, 400);
+        }
+
+        // ✅ Créer le produit pour chaque boutique
+        const produitsCreated = [];
+        const errors = [];
+
+        for (const boutique of boutiques) {
+            try {
+                const produit = await Produit.create({
+                    name: produitData.name,
+                    description: produitData.description,
+                    category: produitData.category,
+                    stock: boutique.stock || 0,
+                    unit: produitData.unit,
+                    basePrice: produitData.basePrice,
+                    boutique_id: boutique.boutique_id,
+                    metadata: produitData.metadata
+                });
+
+                produitsCreated.push({
+                    boutique_id: boutique.boutique_id,
+                    produit_id: produit._id,
+                    stock: produit.stock
+                });
+            } catch (error) {
+                errors.push({
+                    boutique_id: boutique.boutique_id,
+                    error: (error as Error).message
+                });
+            }
+        }
+
+        // ✅ Retourner le résultat
+        if (errors.length > 0 && produitsCreated.length === 0) {
+            return c.json({
+                error: "Échec de la création dans toutes les boutiques",
+                details: errors
+            }, 500);
+        }
+
+        return c.json({
+            success: true,
+            message: `Produit créé dans ${produitsCreated.length} boutique(s)`,
+            produits: produitsCreated,
+            errors: errors.length > 0 ? errors : undefined
+        }, 201);
+    } catch (error) {
+        const err = error as Error;
+        return c.json({ error: err.message }, 500);
+    }
+};
+
+// ➤ 1. Créer un produit (ancienne méthode - pour une seule boutique)
 export const createProduit = async (c: Context) => {
     try {
         const body = await c.req.json();
 
-        // ✅ Validation : boutique_id est requis
         if (!body.boutique_id) {
             return c.json({
                 error: "L'ID de la boutique est requis"
             }, 400);
         }
 
-        // ✅ Validation : stock, unit et basePrice requis
         if (body.stock === undefined || body.stock < 0) {
             return c.json({
                 error: "Le stock doit être un nombre positif"
@@ -100,6 +159,7 @@ export const createProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
+
 // ➤ 4. Mettre à jour un produit
 export const updateProduit = async (c: Context) => {
     try {
@@ -109,7 +169,6 @@ export const updateProduit = async (c: Context) => {
         const produit = await Produit.findById(id);
         if (!produit) return c.json({ error: "Produit introuvable" }, 404);
 
-        // ✅ Mise à jour des champs
         if (body.name !== undefined) produit.name = body.name;
         if (body.description !== undefined) produit.description = body.description;
         if (body.category !== undefined) produit.category = body.category;
@@ -133,6 +192,7 @@ export const updateProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
+
 // ➤ 5. Supprimer un produit
 export const deleteProduit = async (c: Context) => {
     try {
@@ -146,7 +206,8 @@ export const deleteProduit = async (c: Context) => {
         return c.json({ error: err.message }, 500);
     }
 };
-// ➤ 6. APPROVISIONNER un produit (ajouter au stock)
+
+// ➤ 6. APPROVISIONNER un produit
 export const approvisionnerProduit = async (c: Context) => {
     console.group("📦 [BACKEND] approvisionnerProduit");
     try {
@@ -155,7 +216,6 @@ export const approvisionnerProduit = async (c: Context) => {
 
         console.log("➡ Requête reçue:", { id, quantity, unit });
 
-        // Validation
         if (!quantity || quantity <= 0) {
             console.warn("❌ Quantité invalide");
             return c.json({ error: "Quantité invalide" }, 400);
@@ -169,7 +229,6 @@ export const approvisionnerProduit = async (c: Context) => {
 
         console.log("✅ Produit trouvé:", produit.name);
 
-        // Si l'unité fournie est différente de l'unité de base, convertir
         let quantityToAdd = quantity;
         if (unit && unit !== produit.unit) {
             quantityToAdd = convertUnit(quantity, unit, produit.unit);
@@ -212,7 +271,6 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         console.log("➡ Requête reçue :", { produitId, boutiqueSrcId, boutiqueDestId, quantity, unit });
 
-        // Validation
         if (!produitId || !boutiqueSrcId || !boutiqueDestId || !quantity || quantity <= 0) {
             console.warn("❌ Données invalides");
             return c.json({ error: "Données invalides" }, 400);
@@ -223,7 +281,6 @@ export const transfertStockBoutiques = async (c: Context) => {
             return c.json({ error: "La boutique source et destination doivent être différentes" }, 400);
         }
 
-        // ✅ D'abord, trouver le produit dans la boutique DESTINATION pour avoir son nom
         const produitDest = await Produit.findOne({
             _id: produitId,
             boutique_id: boutiqueDestId
@@ -236,7 +293,6 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         console.log("✅ Produit destination trouvé:", produitDest.name);
 
-        // ✅ Maintenant, chercher le même produit (par nom) dans la boutique SOURCE
         const produitSrc = await Produit.findOne({
             name: produitDest.name,
             boutique_id: boutiqueSrcId
@@ -251,7 +307,6 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         console.log("✅ Produit source trouvé:", produitSrc.name);
 
-        // Convertir la quantité en unité de base si nécessaire
         const unitToUse = unit || produitSrc.unit;
         let quantityToTransfer = quantity;
 
@@ -262,7 +317,6 @@ export const transfertStockBoutiques = async (c: Context) => {
 
         console.log("📦 Quantité à transférer:", quantityToTransfer, produitSrc.unit);
 
-        // Vérifier le stock de la boutique source
         if (produitSrc.stock < quantityToTransfer) {
             console.warn("❌ Stock insuffisant:", produitSrc.stock, "<", quantityToTransfer);
             return c.json({
@@ -270,14 +324,12 @@ export const transfertStockBoutiques = async (c: Context) => {
             }, 400);
         }
 
-        // Déduire du stock source
         const oldStockSrc = produitSrc.stock;
         produitSrc.stock -= quantityToTransfer;
         await produitSrc.save();
 
         console.log("✅ Stock source mis à jour:", oldStockSrc, "→", produitSrc.stock);
 
-        // Ajouter au stock destination
         const oldStockDest = produitDest.stock;
         produitDest.stock += quantityToTransfer;
         await produitDest.save();

@@ -1,7 +1,25 @@
 // frontend/src/services/product.js
 const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/produit` : "http://localhost:3000/produit";
 
-// ➤ 1. Créer un produit
+// ✅ NOUVELLE FONCTION : Créer un produit dans plusieurs boutiques
+export async function addProduitMultiBoutiques(produitData) {
+  try {
+    const res = await fetch(`${API_URL}/multi-boutiques`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(produitData),
+    });
+    const data = await res.json();
+    if (!res.ok) return { error: data.error || "Erreur lors de la création" };
+    return data;
+  } catch (err) {
+    return { error: "Serveur injoignable" };
+  }
+}
+
+// ➤ 1. Créer un produit (ancienne méthode - une seule boutique)
 export async function addProduit(produit) {
   try {
     const res = await fetch(`${API_URL}`, {

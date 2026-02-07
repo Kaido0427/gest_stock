@@ -10,7 +10,8 @@ import {
   getAlertesStock,
   getProduitsByBoutique,
   transfertStockBoutiques,
-  approvisionnerProduit
+  approvisionnerProduit,
+  createProduitMultiBoutiques,
 } from '../controllers/produit.controller.js';
 
 const produitRoutes = new Hono();
@@ -27,6 +28,7 @@ produitRoutes.get('/produitByBoutique/:boutiqueId', getProduitsByBoutique);
 produitRoutes.post('/transfert-stock', transfertStockBoutiques);
 
 // 3️⃣ CRUD de base
+produitRoutes.post('/multi-boutiques', createProduitMultiBoutiques);
 produitRoutes.post('/', createProduit);
 produitRoutes.get('/', getAllProduits);
 

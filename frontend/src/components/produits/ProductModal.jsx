@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Store } from "lucide-react";
-import { addProduit, updateProduit } from "../../services/product";
+import { X, Store, Check } from "lucide-react";
+import { addProduitMultiBoutiques, updateProduit } from "../../services/product";
 import { getAllBoutiques } from "../../services/boutique";
 
 const ProductModal = ({ isOpen, onClose, product }) => {
@@ -10,11 +10,13 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     description: "",
     category: "",
     customCategory: "",
-    boutique_id: "",
-    stock: 0,
     unit: "",
     basePrice: 0,
   });
+
+  // ✅ Gestion des boutiques sélectionnées avec leurs stocks
+  const [selectedBoutiques, setSelectedBoutiques] = useState([]);
+  // Format: [{ boutique_id: "123", stock: 50 }, ...]
 
   const [boutiques, setBoutiques] = useState([]);
   const [loadingBoutiques, setLoadingBoutiques] = useState(false);
@@ -40,27 +42,34 @@ const ProductModal = ({ isOpen, onClose, product }) => {
   // Remplit le formulaire en mode édition
   useEffect(() => {
     if (product) {
+      // Mode édition : une seule boutique
       setForm({
         name: product.name || "",
         description: product.description || "",
         category: product.category || "",
         customCategory: "",
-        boutique_id: product.boutique_id?._id || product.boutique_id || "",
-        stock: product.stock || 0,
         unit: product.unit || "",
         basePrice: product.basePrice || 0,
       });
+
+      // Pré-sélectionner la boutique actuelle
+      setSelectedBoutiques([
+        {
+          boutique_id: product.boutique_id?._id || product.boutique_id,
+          stock: product.stock || 0,
+        },
+      ]);
     } else {
+      // Mode création
       setForm({
         name: "",
         description: "",
         category: "",
         customCategory: "",
-        boutique_id: "",
-        stock: 0,
         unit: "",
         basePrice: 0,
       });
+      setSelectedBoutiques([]);
     }
   }, [product]);
 
@@ -68,6 +77,29 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     const value =
       e.target.type === "number" ? Number(e.target.value) : e.target.value;
     setForm({ ...form, [e.target.name]: value });
+  };
+
+  // ✅ Gestion du toggle de boutique
+  const toggleBoutique = (boutiqueId) => {
+    setSelectedBoutiques((prev) => {
+      const exists = prev.find((b) => b.boutique_id === boutiqueId);
+      if (exists) {
+        // Décocher : retirer la boutique
+        return prev.filter((b) => b.boutique_id !== boutiqueId);
+      } else {
+        // Cocher : ajouter avec stock 0 par défaut
+        return [...prev, { boutique_id: boutiqueId, stock: 0 }];
+      }
+    });
+  };
+
+  // ✅ Mise à jour du stock d'une boutique
+  const updateBoutiqueStock = (boutiqueId, newStock) => {
+    setSelectedBoutiques((prev) =>
+      prev.map((b) =>
+        b.boutique_id === boutiqueId ? { ...b, stock: Number(newStock) } : b
+      )
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -78,8 +110,8 @@ const ProductModal = ({ isOpen, onClose, product }) => {
       return;
     }
 
-    if (!form.boutique_id) {
-      alert("Veuillez sélectionner une boutique");
+    if (selectedBoutiques.length === 0) {
+      alert("Veuillez sélectionner au moins une boutique");
       return;
     }
 
@@ -93,8 +125,10 @@ const ProductModal = ({ isOpen, onClose, product }) => {
       return;
     }
 
-    if (form.stock < 0) {
-      alert("Le stock ne peut pas être négatif");
+    // Vérifier que tous les stocks sont >= 0
+    const invalidStock = selectedBoutiques.find((b) => b.stock < 0);
+    if (invalidStock) {
+      alert("Les stocks ne peuvent pas être négatifs");
       return;
     }
 
@@ -108,22 +142,31 @@ const ProductModal = ({ isOpen, onClose, product }) => {
       name: form.name,
       description: form.description,
       category: finalCategory,
-      boutique_id: form.boutique_id,
-      stock: form.stock,
       unit: form.unit,
       basePrice: form.basePrice,
+      boutiques: selectedBoutiques, // ✅ Tableau des boutiques avec leurs stocks
     };
 
     let res;
     if (product && product._id) {
-      res = await updateProduit(product._id, produitData);
+      // Mode édition : utiliser l'ancienne méthode (1 boutique)
+      res = await updateProduit(product._id, {
+        ...produitData,
+        boutique_id: selectedBoutiques[0].boutique_id,
+        stock: selectedBoutiques[0].stock,
+      });
     } else {
-      res = await addProduit(produitData);
+      // Mode création : nouvelle méthode multi-boutiques
+      res = await addProduitMultiBoutiques(produitData);
     }
 
     if (res.error) {
       alert(res.error);
     } else {
+      alert(
+        res.message ||
+        `Produit créé dans ${selectedBoutiques.length} boutique(s) !`
+      );
       onClose();
     }
   };
@@ -154,8 +197,13 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     },
   ];
 
-  // Calculer la valeur totale du stock
-  const valeurTotalStock = form.stock * form.basePrice;
+  // Calculer la valeur totale du stock (tous les boutiques)
+  const valeurTotalStock = selectedBoutiques.reduce(
+    (total, b) => total + b.stock * form.basePrice,
+    0
+  );
+
+  const totalStock = selectedBoutiques.reduce((sum, b) => sum + b.stock, 0);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -163,7 +211,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold">
@@ -190,45 +238,12 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 </label>
                 <input
                   name="name"
-                  placeholder="Ex: Javel 5L, Flacon spray 500mL, Parfum Lavande, Bidon plastique 20L"
+                  placeholder="Ex: Javel 5L, Flacon spray 500mL"
                   value={form.name}
                   onChange={handleChange}
                   className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 />
-              </div>
-
-              {/* Boutique */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
-                  <Store className="w-4 h-4" />
-                  Boutique *
-                </label>
-                <select
-                  name="boutique_id"
-                  value={form.boutique_id}
-                  onChange={handleChange}
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                  disabled={loadingBoutiques}
-                >
-                  <option value="">
-                    {loadingBoutiques
-                      ? "Chargement..."
-                      : "Sélectionner une boutique"}
-                  </option>
-                  {boutiques.map((boutique) => (
-                    <option key={boutique._id} value={boutique._id}>
-                      {boutique.name}{" "}
-                      {boutique.address && `- ${boutique.address}`}
-                    </option>
-                  ))}
-                </select>
-                {boutiques.length === 0 && !loadingBoutiques && (
-                  <p className="text-xs text-red-600 mt-1">
-                    ⚠️ Aucune boutique disponible. Créez-en une d'abord.
-                  </p>
-                )}
               </div>
 
               <div>
@@ -267,7 +282,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 </label>
                 <textarea
                   name="description"
-                  placeholder="Ex: Eau de javel concentrée 12°, parfum citron - idéal pour désinfection"
+                  placeholder="Ex: Eau de javel concentrée 12°"
                   value={form.description}
                   onChange={handleChange}
                   rows="2"
@@ -277,39 +292,12 @@ const ProductModal = ({ isOpen, onClose, product }) => {
             </div>
           </div>
 
-          {/* Section Stock et Prix */}
+          {/* Section Unité et Prix */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700 border-b pb-2">
-              📦 Stock et tarification
+              💰 Unité et tarification
             </h3>
-
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-800">
-                💡 <strong>Important :</strong> Enregistrez la quantité
-                physique réelle que vous avez en stock. Lors de la vente, vous
-                pourrez vendre dans n'importe quelle unité (ex: stock en
-                litres, vente en mL).
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantité en stock *
-                </label>
-                <input
-                  type="number"
-                  name="stock"
-                  placeholder="Ex: 150"
-                  value={form.stock}
-                  onChange={handleChange}
-                  min="0"
-                  step="0.01"
-                  className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Unité de mesure *
@@ -356,35 +344,131 @@ const ProductModal = ({ isOpen, onClose, product }) => {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* Aperçu */}
-            {form.stock > 0 && form.unit && form.basePrice > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg border">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Quantité en stock:</span>
-                    <span className="font-medium text-blue-600">
-                      {form.stock} {form.unit}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Prix unitaire:</span>
-                    <span className="font-medium text-green-600">
-                      {form.basePrice.toLocaleString()} FCFA / {form.unit}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm font-semibold pt-2 border-t">
-                    <span className="text-gray-700">Valeur totale:</span>
-                    <span className="text-green-700">
-                      {valeurTotalStock.toLocaleString()} FCFA
-                    </span>
-                  </div>
+          {/* Section Boutiques et Stocks */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
+              <Store className="w-5 h-5" />
+              Boutiques et stocks initiaux
+            </h3>
+
+            {!product && (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  💡 <strong>Mode multi-boutiques :</strong> Cochez les
+                  boutiques où ce produit sera disponible et indiquez le stock
+                  initial pour chacune.
+                </p>
+              </div>
+            )}
+
+            {loadingBoutiques ? (
+              <p className="text-sm text-gray-500">Chargement des boutiques...</p>
+            ) : boutiques.length === 0 ? (
+              <p className="text-sm text-red-600">
+                ⚠️ Aucune boutique disponible. Créez-en une d'abord.
+              </p>
+            ) : (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {boutiques.map((boutique) => {
+                  const isSelected = selectedBoutiques.find(
+                    (b) => b.boutique_id === boutique._id
+                  );
+
+                  return (
+                    <div
+                      key={boutique._id}
+                      className={`p-4 border rounded-lg transition-all ${isSelected
+                          ? "bg-blue-50 border-blue-500"
+                          : "bg-white border-gray-200 hover:border-gray-300"
+                        }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Checkbox */}
+                        <button
+                          type="button"
+                          onClick={() => toggleBoutique(boutique._id)}
+                          className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
+                              ? "bg-blue-600 border-blue-600"
+                              : "border-gray-300 hover:border-blue-400"
+                            }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3 text-white" />}
+                        </button>
+
+                        {/* Infos boutique */}
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {boutique.name}
+                              </p>
+                              {boutique.address && (
+                                <p className="text-sm text-gray-600">
+                                  {boutique.address}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Input stock */}
+                            {isSelected && (
+                              <div className="ml-4">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  Stock initial
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="number"
+                                    value={isSelected.stock}
+                                    onChange={(e) =>
+                                      updateBoutiqueStock(
+                                        boutique._id,
+                                        e.target.value
+                                      )
+                                    }
+                                    min="0"
+                                    step="0.01"
+                                    className="w-24 border px-2 py-1 rounded text-sm focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0"
+                                  />
+                                  <span className="text-sm text-gray-600">
+                                    {form.unit || "unité"}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Résumé */}
+            {selectedBoutiques.length > 0 && form.basePrice > 0 && (
+              <div className="p-4 bg-gray-50 rounded-lg border space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">
+                    Boutiques sélectionnées:
+                  </span>
+                  <span className="font-medium text-blue-600">
+                    {selectedBoutiques.length}
+                  </span>
                 </div>
-
-                <div className="text-sm text-gray-600 p-3 bg-green-50 rounded border border-green-100">
-                  ✅ <strong>Exemple de vente :</strong> Si votre stock est en{" "}
-                  {form.unit}, vous pourrez vendre en différentes unités lors de
-                  la vente (le système convertira automatiquement).
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Stock total:</span>
+                  <span className="font-medium text-blue-600">
+                    {totalStock} {form.unit}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold pt-2 border-t">
+                  <span className="text-gray-700">Valeur totale:</span>
+                  <span className="text-green-700">
+                    {valeurTotalStock.toLocaleString()} FCFA
+                  </span>
                 </div>
               </div>
             )}
@@ -402,9 +486,15 @@ const ProductModal = ({ isOpen, onClose, product }) => {
             <button
               type="submit"
               className="px-5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              disabled={!form.boutique_id || !form.unit || form.basePrice <= 0}
+              disabled={
+                selectedBoutiques.length === 0 ||
+                !form.unit ||
+                form.basePrice <= 0
+              }
             >
-              {product ? "Mettre à jour" : "Créer le produit"}
+              {product
+                ? "Mettre à jour"
+                : `Créer dans ${selectedBoutiques.length} boutique(s)`}
             </button>
           </div>
         </form>
