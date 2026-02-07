@@ -22,6 +22,7 @@ const App = () => {
         return;
       }
 
+      
       const currentUser = await getCurrentUser();
 
       if (currentUser) {
