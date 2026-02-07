@@ -1,5 +1,5 @@
 // frontend/src/services/product.js
-const API_URL = "https://api.mahoutodji.online/produit";
+const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/produit` : "http://localhost:3000/produit";
 
 // ➤ 1. Créer un produit
 export async function addProduit(produit) {

@@ -5,6 +5,10 @@ import LoginPage from "./pages/Login";
 import { getCurrentUser, login, logout } from "./services/auth";
 
 const App = () => {
+  // 🔍 TEST DE LA VARIABLE D'ENVIRONNEMENT
+  console.log('API_URL:', import.meta.env.VITE_API_URL);
+  console.log('Toutes les env:', import.meta.env);
+  
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,26 +38,24 @@ const App = () => {
     initAuth();
   }, []);
 
-  // ✅ handleLogin gère TOUT le processus
   const handleLogin = async (email, password) => {
     const result = await login(email, password);
 
     if (result.error) {
-      return result; // ✅ Retourner l'erreur au LoginPage
+      return result;
     }
 
-    // ✅ Récupérer les infos utilisateur
     const currentUser = await getCurrentUser();
     if (currentUser) {
       setUser(currentUser);
       setIsAuthenticated(true);
     }
 
-    return result; // ✅ Retourner le succès
+    return result;
   };
 
   const handleLogout = async () => {
-    await logout(); // ✅ Appeler le service logout
+    await logout();
     setUser(null);
     setIsAuthenticated(false);
   };

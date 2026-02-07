@@ -1,5 +1,5 @@
 // services/sale.js
-const API_URL = "https://api.mahoutodji.online";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 // services/sale.js
 

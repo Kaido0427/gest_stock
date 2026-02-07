@@ -1,5 +1,5 @@
 // frontend/src/services/auth.js
-const BASE_URL = "https://api.mahoutodji.online";
+const BASE_URL =import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 export async function login(email, password) {
   console.log("🔵 Tentative de connexion à:", `${BASE_URL}/auth/login`);

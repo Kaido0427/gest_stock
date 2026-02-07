@@ -1,10 +1,10 @@
-const BASE_URL = "https://api.mahoutodji.online/";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 // Récupérer toutes les boutiques
 export const getAllBoutiques = async () => {
     try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`${BASE_URL}boutiques`, {
+        const res = await fetch(`${BASE_URL}/boutiques`, {
             method: "GET",
             headers: {
                 "Authorization": `Bearer ${token}`,
