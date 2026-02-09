@@ -184,6 +184,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     "Plastic KT",
     "Plastic épice",
     "Take away",
+    "Unité",
     "Autre",
   ];
 
