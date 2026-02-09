@@ -1,5 +1,5 @@
 // pages/SalesPage.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect,useRef } from "react";
 import {
   Search, Package, ShoppingCart,
   Receipt, Plus, Minus, X
@@ -9,6 +9,8 @@ import { vendreProduit } from "../../services/sale";
 import { getCurrentUser } from "../../services/auth";
 import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
+
+// --- fin helpers ---
 
 // --- Ajoute juste après les imports ---
 const UNIT_MAPS = {
@@ -43,10 +45,15 @@ const convertUnit = (quantity, fromUnit, toUnit) => {
   // fallback: can't convert between different families
   return quantity;
 };
-// --- fin helpers ---
 
+
+const isMobile = () => {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth <= 768;
+};
 
 const SalesPage = ({ products, onRefreshProducts }) => {
+  const cartRef = useRef(null);
   // États
   const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -319,11 +326,30 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
                       product={product}
                       isSelected={selectedProduct?._id === product._id}
                       onSelect={() => {
-                        setSelectedProduct(product);
-                        setQuantity(1);
-                        setSelectedUnit(product.unit);
-                        setCustomPrice("");
-                      }}
+  setSelectedProduct(product);
+  setQuantity(1);
+  setSelectedUnit(product.unit);
+  setCustomPrice("");
+
+  if (isMobile() && cartRef.current) {
+    requestAnimationFrame(() => {
+      cartRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+
+      cartRef.current.focus({ preventScroll: true });
+
+      // 🔵 Feedback visuel (flash du panier)
+      cartRef.current.classList.add("ring-2", "ring-blue-400");
+
+      setTimeout(() => {
+        cartRef.current.classList.remove("ring-2", "ring-blue-400");
+      }, 600);
+    });
+  }
+}}
+
                       showBoutique={user?.role === "admin"}
                     />
                   ))}
@@ -336,7 +362,13 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
         {/* COLONNE DROITE : Panier */}
         <div className="space-y-6">
           {/* PANIER */}
-          <div className="bg-white p-6 rounded-xl shadow">
+          <div
+  ref={cartRef}
+  id="cart-anchor"
+  tabIndex={-1}
+  className="bg-white p-6 rounded-xl shadow"
+>
+
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5" />

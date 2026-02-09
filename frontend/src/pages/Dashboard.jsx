@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { Menu } from "lucide-react";
+// pages/Dashboard.jsx
+import React, { useState, useEffect, useRef } from "react";
+import { Menu, ArrowUp } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 import DashboardPage from "../components/DashboardPage";
 import SalesPage from "../components/ventes/SalesPage";
@@ -11,15 +12,13 @@ import { getProduits } from "../services/product";
 import { getCurrentUser } from "../services/auth";
 
 const Dashboard = () => {
+  // States
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [cart, setCart] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const [user, setUser] = useState(null);
-
-  // États pour les données
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [stats, setStats] = useState({
@@ -28,16 +27,17 @@ const Dashboard = () => {
     year: { sales: 0, transactions: 0, items: 0 },
   });
 
-  // Fonction pour charger les produits depuis l'API
+  // Ref & scroll top
+  const scrollRef = useRef(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Charger les produits
   const loadProducts = async () => {
     setLoading(true);
     try {
       const data = await getProduits();
-      if (!data.error) {
-        setProducts(data);
-      } else {
-        console.error("Erreur lors du chargement des produits:", data.error);
-      }
+      if (!data.error) setProducts(data);
+      else console.error("Erreur lors du chargement des produits:", data.error);
     } catch (error) {
       console.error("Erreur lors du chargement des produits:", error);
     } finally {
@@ -45,7 +45,7 @@ const Dashboard = () => {
     }
   };
 
-  // Charger les produits et l'utilisateur au montage du composant
+  // Init user + produits
   useEffect(() => {
     const init = async () => {
       await loadProducts();
@@ -65,19 +65,27 @@ const Dashboard = () => {
     init();
   }, []);
 
- 
+  // Scroll listener
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
 
-  // Fonction pour rafraîchir les produits (à passer aux composants enfants)
+    const onScroll = () => setShowScrollTop(el.scrollTop > 300);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Refresh produits
   const handleRefreshProducts = async () => {
-    await loadProducts(); // ← Ajoute async/await
+    await loadProducts();
   };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    setIsLoggedIn(false); 
+    setIsLoggedIn(false);
   };
 
-  // Gestion des pages avec les données mises à jour
+  // Pages
   const pages = {
     dashboard: (
       <DashboardPage
@@ -102,34 +110,28 @@ const Dashboard = () => {
         loading={loading}
       />
     ),
-    reports: (
-      <ReportsPage
-        stats={stats}
-        products={products}
-        sales={sales}
-      />
-    ),
+    reports: <ReportsPage stats={stats} products={products} sales={sales} />,
     settings: <SettingsPage />,
   };
 
-  if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} />;
-  }
+  if (!isLoggedIn) return <Login onLogin={() => setIsLoggedIn(true)} />;
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* Sidebar */}
       <Sidebar
         currentPage={currentPage}
         onPageChange={setCurrentPage}
         onLogout={handleLogout}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        role={user?.role || "employe"} // rôle pour filtrer les menus
+        role={user?.role || "employe"}
         boutiqueName={user?.boutique?.name}
       />
 
+      {/* Contenu principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header mobile avec bouton menu */}
+        {/* Header mobile */}
         <div className="lg:hidden bg-white border-b px-4 py-3 flex items-center gap-3 shadow-sm">
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -141,8 +143,8 @@ const Dashboard = () => {
           <h1 className="text-lg font-semibold text-gray-800">Ma Boutique</h1>
         </div>
 
-        {/* Contenu principal */}
-        <div className="flex-1 overflow-auto">
+        {/* Contenu scrollable */}
+        <div ref={scrollRef} className="flex-1 overflow-auto">
           <div className="p-4 sm:p-6 lg:p-8">
             {loading && currentPage === "products" ? (
               <div className="flex justify-center items-center h-64">
@@ -157,6 +159,19 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Bouton flottant scroll top */}
+      {showScrollTop && (
+        <button
+          onClick={() =>
+            scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+          }
+          className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition flex items-center justify-center"
+          aria-label="Remonter en haut"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 };
