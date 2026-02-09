@@ -10,6 +10,42 @@ import { getCurrentUser } from "../../services/auth";
 import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
 
+// --- Ajoute juste après les imports ---
+const UNIT_MAPS = {
+  // valeurs = litres par unité / kilogrammes par unité (pour conversion via "toUnit")
+  liquids: { kl: 1000, l: 1, cl: 0.01, ml: 0.001 },
+  weights: { t: 1000, kg: 1, g: 0.001, mg: 0.000001 },
+};
+
+const normalize = (u) => (typeof u === "string" ? u.trim().toLowerCase() : u);
+
+const convertUnit = (quantity, fromUnit, toUnit) => {
+  if (!fromUnit || !toUnit) return quantity;
+  const f = normalize(fromUnit);
+  const t = normalize(toUnit);
+
+  // same unit
+  if (f === t) return quantity;
+
+  const liq = UNIT_MAPS.liquids;
+  const w = UNIT_MAPS.weights;
+
+  if (liq[f] !== undefined && liq[t] !== undefined) {
+    const inLiters = quantity * liq[f];
+    return inLiters / liq[t];
+  }
+
+  if (w[f] !== undefined && w[t] !== undefined) {
+    const inKg = quantity * w[f];
+    return inKg / w[t];
+  }
+
+  // fallback: can't convert between different families
+  return quantity;
+};
+// --- fin helpers ---
+
+
 const SalesPage = ({ products, onRefreshProducts }) => {
   // États
   const [user, setUser] = useState(null);
@@ -76,15 +112,20 @@ const SalesPage = ({ products, onRefreshProducts }) => {
 
   // Calculer le prix estimé
   const calculateEstimatedPrice = () => {
-    if (!selectedProduct || !quantity || quantity <= 0) return 0;
+  if (!selectedProduct || !quantity || quantity <= 0) return 0;
 
-    if (customPrice && parseFloat(customPrice) > 0) {
-      return parseFloat(customPrice);
-    }
+  // si prix personnalisé total (frontend attend un prix TOTAL)
+  if (customPrice && parseFloat(customPrice) > 0) {
+    return parseFloat(customPrice);
+  }
 
-    const unitToUse = selectedUnit || selectedProduct.unit;
-    return selectedProduct.basePrice * quantity;
-  };
+  const unitToUse = selectedUnit || selectedProduct.unit;
+  // Convertir la quantité vendue en unité de base du produit (ex: en kg ou en L)
+  const qtyInBase = convertUnit(parseFloat(quantity), unitToUse, selectedProduct.unit);
+  // prix total = basePrice (par unité de base) * qtyInBase
+  return (parseFloat(selectedProduct.basePrice) || 0) * qtyInBase;
+};
+
 
   // Ajouter au panier
   const handleAddToCart = () => {
@@ -104,18 +145,18 @@ const SalesPage = ({ products, onRefreshProducts }) => {
 
     const estimatedPrice = calculateEstimatedPrice();
 
-    const cartItem = {
-      id: `${selectedProduct._id}-${Date.now()}`,
-      productId: selectedProduct._id,
-      productName: selectedProduct.name,
-      quantity: parseFloat(quantity),
-      unit: unitToSell,
-      baseUnit: selectedProduct.unit,
-      basePrice: selectedProduct.basePrice,
-      estimatedTotal: estimatedPrice,
-      customPrice: customPrice ? parseFloat(customPrice) : null,
-      maxStock: selectedProduct.stock
-    };
+  const cartItem = {
+  id: `${selectedProduct._id}-${Date.now()}`,
+  productId: selectedProduct._id,
+  productName: selectedProduct.name,
+  quantity: parseFloat(quantity),
+  unit: unitToSell,
+  baseUnit: selectedProduct.unit,
+  basePrice: selectedProduct.basePrice,
+  estimatedTotal: estimatedPrice,
+  customPrice: customPrice ? parseFloat(customPrice) : undefined, // undefined si pas de prix perso
+  maxStock: selectedProduct.stock
+};
 
     setCart([...cart, cartItem]);
 
@@ -126,19 +167,24 @@ const SalesPage = ({ products, onRefreshProducts }) => {
   };
 
   // Mettre à jour la quantité d'un item
-  const handleUpdateQuantity = (itemId, newQuantity) => {
-    if (newQuantity < 0.5) return;
+const handleUpdateQuantity = (itemId, newQuantity) => {
+  if (newQuantity < 0.01) return;
 
-    setCart(cart.map(item => {
-      if (item.id === itemId) {
-        const newTotal = item.customPrice
-          ? item.customPrice
-          : item.basePrice * newQuantity;
-        return { ...item, quantity: newQuantity, estimatedTotal: newTotal };
-      }
-      return item;
-    }));
-  };
+  setCart(cart.map(item => {
+    if (item.id === itemId) {
+      const unitToUse = item.unit || item.baseUnit;
+      // convertir la nouvelle quantité en unité de base
+      const qtyInBase = convertUnit(parseFloat(newQuantity), unitToUse, item.baseUnit);
+      const newTotal = item.customPrice !== undefined && item.customPrice !== null
+        ? item.customPrice  // customPrice est traité comme TOTAL
+        : (parseFloat(item.basePrice) || 0) * qtyInBase;
+
+      return { ...item, quantity: Math.round(newQuantity*100)/100, estimatedTotal: Math.round(newTotal*100)/100 };
+    }
+    return item;
+  }));
+};
+
 
   // Retirer un item du panier
   const handleRemoveFromCart = (itemId) => {
@@ -431,39 +477,44 @@ const SalesPage = ({ products, onRefreshProducts }) => {
                 </div>
 
                 {/* Quantité */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantité
-                  </label>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1}
-                      className={`p-2 rounded-lg ${
-                        quantity <= 1
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Quantité
+  </label>
+  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+    <button
+      onClick={() => setQuantity(Math.max(0.01, Math.round((quantity - 0.01) * 100) / 100))}
+      disabled={quantity <= 0.01}
+      className={`p-2 rounded-lg ${
+        quantity <= 0.01
+          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+      }`}
+    >
+      <Minus className="w-4 h-4" />
+    </button>
 
-                    <input
-                      type="number"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseFloat(e.target.value) || 1))}
-                      className="w-20 text-center text-2xl font-bold text-gray-800 bg-transparent"
-                      step="0.01"
-                    />
+    <input
+      type="number"
+      value={quantity}
+      onChange={(e) => {
+        const v = parseFloat(e.target.value);
+        setQuantity(Math.max(0.01, isNaN(v) ? 0.01 : Math.round(v * 100) / 100));
+      }}
+      className="w-20 text-center text-2xl font-bold text-gray-800 bg-transparent"
+      step="0.01"
+      min="0.01"
+    />
 
-                    <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+    <button
+      onClick={() => setQuantity(Math.round((quantity + 0.01) * 100) / 100)}
+      className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+    >
+      <Plus className="w-4 h-4" />
+    </button>
+  </div>
+</div>
+
 
                 {/* Prix personnalisé */}
                 <div>

@@ -7,13 +7,17 @@ import type { Types } from "mongoose";
 
 // ✅ Helper function pour les conversions d'unités (même que dans produit.controller)
 const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number => {
-    if (fromUnit === toUnit) return quantity;
+    if (!fromUnit || !toUnit) return quantity;
+    const from = fromUnit.trim().toLowerCase();
+    const to = toUnit.trim().toLowerCase();
+
+    if (from === to) return quantity;
 
     const liquidToLiter: { [key: string]: number } = {
-        'kL': 1000,
-        'L': 1,
-        'cL': 0.01,
-        'mL': 0.001
+        'kl': 1000,
+        'l': 1,
+        'cl': 0.01,
+        'ml': 0.001
     };
 
     const weightToKg: { [key: string]: number } = {
@@ -23,14 +27,14 @@ const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number
         'mg': 0.000001
     };
 
-    if (liquidToLiter[fromUnit] && liquidToLiter[toUnit]) {
-        const inLiters = quantity * liquidToLiter[fromUnit];
-        return inLiters / liquidToLiter[toUnit];
+    if (liquidToLiter[from] !== undefined && liquidToLiter[to] !== undefined) {
+        const inLiters = quantity * liquidToLiter[from];
+        return inLiters / liquidToLiter[to];
     }
 
-    if (weightToKg[fromUnit] && weightToKg[toUnit]) {
-        const inKg = quantity * weightToKg[fromUnit];
-        return inKg / weightToKg[toUnit];
+    if (weightToKg[from] !== undefined && weightToKg[to] !== undefined) {
+        const inKg = quantity * weightToKg[from];
+        return inKg / weightToKg[to];
     }
 
     return quantity;
