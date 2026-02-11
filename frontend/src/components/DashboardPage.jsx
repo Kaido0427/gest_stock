@@ -17,8 +17,6 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
-  // DashboardPage.jsx - Section de chargement des boutiques (ligne ~40-65)
-
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -32,22 +30,17 @@ const DashboardPage = () => {
 
         setUser(currentUser);
 
-        // Charger les boutiques
         console.log("🏪 Loading boutiques...");
         const boutiquesData = await getBoutiques();
         console.log("🏪 Boutiques response:", boutiquesData);
 
-        // ✅ FIX: Gérer les deux formats de réponse possibles
         let boutiquesArray = [];
 
         if (Array.isArray(boutiquesData)) {
-          // Format: tableau direct
           boutiquesArray = boutiquesData;
         } else if (boutiquesData?.success && boutiquesData?.data) {
-          // Format: { success: true, data: [...] }
           boutiquesArray = boutiquesData.data;
         } else if (boutiquesData?.data && Array.isArray(boutiquesData.data)) {
-          // Format alternatif: { data: [...] }
           boutiquesArray = boutiquesData.data;
         }
 
@@ -55,11 +48,9 @@ const DashboardPage = () => {
 
         if (boutiquesArray.length > 0) {
           if (currentUser.role === "admin") {
-            // Admin : toutes les boutiques
             setBoutiques(boutiquesArray);
             console.log("👨‍💼 Admin mode - All boutiques available");
           } else if (currentUser.role === "employe" && currentUser.boutique) {
-            // Employé : uniquement sa boutique
             const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
 
             if (maBoutique) {
@@ -83,6 +74,7 @@ const DashboardPage = () => {
 
     loadUser();
   }, []);
+
   const fetchData = async () => {
     if (!user) {
       console.warn("⚠️ fetchData called without user");
@@ -92,7 +84,7 @@ const DashboardPage = () => {
     setLoadingData(true);
 
     try {
-      // Déterminer l'ID de la boutique à filtrer
+      // ✅ FIX: Déterminer correctement le boutiqueId
       let boutiqueId = null;
 
       if (user.role === "employe" && user.boutique) {
@@ -100,18 +92,18 @@ const DashboardPage = () => {
         console.log("👷 Employee - Filtering by boutique:", boutiqueId);
       } else if (user.role === "admin" && selectedBoutique) {
         boutiqueId = selectedBoutique._id;
-        console.log("👨‍💼 Admin - Filtering by selected boutique:", boutiqueId);
+        console.log("👨‍💼 Admin - Filtering by selected boutique:", boutiqueId, selectedBoutique.name);
       } else {
+        boutiqueId = null;
         console.log("👨‍💼 Admin - No filter (all boutiques)");
       }
 
       console.log("📊 Fetching data with boutiqueId:", boutiqueId);
 
-      // Charger les statistiques du jour
+      // ✅ FIX: Passer boutiqueId correctement
       const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
       console.log("📈 Stats jour:", statsJourData);
 
-      // Charger les statistiques du mois
       const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
       console.log("📈 Stats mois:", statsMoisData);
 
@@ -133,9 +125,15 @@ const DashboardPage = () => {
         console.log("📊 Setting stats:", newStats);
         setStats(newStats);
         setTopProduits(statsJourData.data?.topProduits || []);
+      } else {
+        console.error("❌ Stats error:", { statsJourData, statsMoisData });
+        setStats({
+          today: { sales: 0, transactions: 0 },
+          month: { sales: 0, transactions: 0 }
+        });
+        setTopProduits([]);
       }
 
-      // Charger l'historique des ventes
       const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
       console.log("🛒 Ventes récentes:", ventesData);
 
@@ -153,14 +151,19 @@ const DashboardPage = () => {
         }));
         console.log("✅ Ventes processed:", ventes);
         setSales(ventes);
+      } else {
+        console.error("❌ Ventes error:", ventesData);
+        setSales([]);
       }
 
-      // Charger les alertes stock
       const alertesData = await getAlertesStock(10, boutiqueId);
       console.log("⚠️ Alertes stock:", alertesData);
 
       if (alertesData?.success) {
         setAlertes(alertesData.data || []);
+      } else {
+        console.error("❌ Alertes error:", alertesData);
+        setAlertes([]);
       }
 
     } catch (error) {
@@ -170,7 +173,6 @@ const DashboardPage = () => {
     }
   };
 
-  // Charger les données quand user ou selectedBoutique change
   useEffect(() => {
     if (user && !loading) {
       console.log("🔄 Trigger fetchData - user:", user.role, "boutique:", selectedBoutique?.name || "All");
@@ -218,7 +220,6 @@ const DashboardPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Sélecteur de boutique (ADMIN uniquement) */}
           {user.role === "admin" && (
             <div className="relative min-w-[200px]">
               <select
@@ -228,6 +229,7 @@ const DashboardPage = () => {
                   const boutique = e.target.value
                     ? boutiques.find(b => b._id === e.target.value)
                     : null;
+                  console.log("🔄 Selected boutique:", boutique);
                   setSelectedBoutique(boutique);
                 }}
                 className="appearance-none w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer text-sm font-medium transition-all hover:border-gray-400"
@@ -243,7 +245,6 @@ const DashboardPage = () => {
             </div>
           )}
 
-          {/* Bouton actualiser */}
           <button
             onClick={fetchData}
             disabled={loadingData}
@@ -257,7 +258,6 @@ const DashboardPage = () => {
 
       {/* CARTES STATISTIQUES */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Ventes du jour */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
@@ -275,7 +275,6 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* Ventes du mois */}
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
@@ -293,7 +292,6 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* Quantité vendue */}
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
@@ -314,7 +312,6 @@ const DashboardPage = () => {
 
       {/* GRILLE VENTES & ALERTES */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Ventes récentes */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-blue-600" />
@@ -350,7 +347,6 @@ const DashboardPage = () => {
           </div>
         </div>
 
-        {/* Alertes Stock */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-orange-600" />
@@ -390,4 +386,4 @@ const DashboardPage = () => {
   );
 };
 
-export default DashboardPage;
+export default DashboardPage;I
