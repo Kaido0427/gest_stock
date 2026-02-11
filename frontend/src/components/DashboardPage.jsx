@@ -17,6 +17,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
 
+  // Chargement des boutiques + user
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -30,12 +31,12 @@ const DashboardPage = () => {
 
         setUser(currentUser);
 
+        // Charger les boutiques
         console.log("🏪 Loading boutiques...");
         const boutiquesData = await getBoutiques();
         console.log("🏪 Boutiques response:", boutiquesData);
 
         let boutiquesArray = [];
-
         if (Array.isArray(boutiquesData)) {
           boutiquesArray = boutiquesData;
         } else if (boutiquesData?.success && boutiquesData?.data) {
@@ -49,12 +50,9 @@ const DashboardPage = () => {
         if (boutiquesArray.length > 0) {
           if (currentUser.role === "admin") {
             setBoutiques(boutiquesArray);
-            console.log("👨‍💼 Admin mode - All boutiques available");
           } else if (currentUser.role === "employe" && currentUser.boutique) {
             const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
-
             if (maBoutique) {
-              console.log("👷 Employee mode - Boutique found:", maBoutique.name);
               setBoutiques([maBoutique]);
               setSelectedBoutique(maBoutique);
             } else {
@@ -75,6 +73,18 @@ const DashboardPage = () => {
     loadUser();
   }, []);
 
+  // Helper : build boutiqueId only if present
+  const determineBoutiqueIdForQuery = () => {
+    if (!user) return null;
+    if (user.role === "employe" && user.boutique) {
+      return user.boutique.id || null;
+    }
+    if (user.role === "admin" && selectedBoutique) {
+      return selectedBoutique._id || null;
+    }
+    return null; // admin + no selectedBoutique => all boutiques
+  };
+
   const fetchData = async () => {
     if (!user) {
       console.warn("⚠️ fetchData called without user");
@@ -84,27 +94,19 @@ const DashboardPage = () => {
     setLoadingData(true);
 
     try {
-      // ✅ FIX: Déterminer correctement le boutiqueId
-      let boutiqueId = null;
-
-      if (user.role === "employe" && user.boutique) {
-        boutiqueId = user.boutique.id;
-        console.log("👷 Employee - Filtering by boutique:", boutiqueId);
-      } else if (user.role === "admin" && selectedBoutique) {
-        boutiqueId = selectedBoutique._id;
-        console.log("👨‍💼 Admin - Filtering by selected boutique:", boutiqueId, selectedBoutique.name);
-      } else {
-        boutiqueId = null;
-        console.log("👨‍💼 Admin - No filter (all boutiques)");
-      }
-
+      const boutiqueId = determineBoutiqueIdForQuery();
       console.log("📊 Fetching data with boutiqueId:", boutiqueId);
 
-      // ✅ FIX: Passer boutiqueId correctement
-      const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
-      console.log("📈 Stats jour:", statsJourData);
+      // ⚠️ IMPORTANT: n'envoyer boutiqueId aux services QUE s'il existe
+      const statsJourData = boutiqueId
+        ? await getStatistiquesVentes("jour", boutiqueId)
+        : await getStatistiquesVentes("jour");
 
-      const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
+      const statsMoisData = boutiqueId
+        ? await getStatistiquesVentes("mois", boutiqueId)
+        : await getStatistiquesVentes("mois");
+
+      console.log("📈 Stats jour:", statsJourData);
       console.log("📈 Stats mois:", statsMoisData);
 
       if (statsJourData?.success && statsMoisData?.success) {
@@ -113,20 +115,20 @@ const DashboardPage = () => {
 
         const newStats = {
           today: {
-            sales: globalJour.montantTotal || 0,
-            transactions: globalJour.totalVentes || 0
+            sales: Number(globalJour.montantTotal || 0),
+            transactions: Number(globalJour.totalVentes || 0)
           },
           month: {
-            sales: globalMois.montantTotal || 0,
-            transactions: globalMois.totalVentes || 0
+            sales: Number(globalMois.montantTotal || 0),
+            transactions: Number(globalMois.totalVentes || 0)
           }
         };
 
         console.log("📊 Setting stats:", newStats);
         setStats(newStats);
-        setTopProduits(statsJourData.data?.topProduits || []);
+        setTopProduits(Array.isArray(statsJourData.data?.topProduits) ? statsJourData.data.topProduits : []);
       } else {
-        console.error("❌ Stats error:", { statsJourData, statsMoisData });
+        // fallback pour éviter affichage undefined
         setStats({
           today: { sales: 0, transactions: 0 },
           month: { sales: 0, transactions: 0 }
@@ -134,7 +136,10 @@ const DashboardPage = () => {
         setTopProduits([]);
       }
 
-      const ventesData = await getHistoriqueVentes({ limit: 4, boutiqueId });
+      // Historique ventes (ne passer boutiqueId que si défini)
+      const ventesData = boutiqueId
+        ? await getHistoriqueVentes({ limit: 4, boutiqueId })
+        : await getHistoriqueVentes({ limit: 4 });
       console.log("🛒 Ventes récentes:", ventesData);
 
       if (ventesData?.success) {
@@ -147,22 +152,23 @@ const DashboardPage = () => {
             minute: '2-digit'
           }),
           items: (v.items || []).reduce((sum, i) => sum + (i.quantitySold || i.quantity || 0), 0),
-          total: v.totalAmount || 0
+          total: Number(v.totalAmount || v.total || 0)
         }));
         console.log("✅ Ventes processed:", ventes);
         setSales(ventes);
       } else {
-        console.error("❌ Ventes error:", ventesData);
         setSales([]);
       }
 
-      const alertesData = await getAlertesStock(10, boutiqueId);
+      // Alertes stock (ne passer boutiqueId que si défini)
+      const alertesData = boutiqueId
+        ? await getAlertesStock(10, boutiqueId)
+        : await getAlertesStock(10);
       console.log("⚠️ Alertes stock:", alertesData);
 
       if (alertesData?.success) {
         setAlertes(alertesData.data || []);
       } else {
-        console.error("❌ Alertes error:", alertesData);
         setAlertes([]);
       }
 
@@ -173,11 +179,13 @@ const DashboardPage = () => {
     }
   };
 
+  // Re-fetch quand user / selectedBoutique / loading changent
   useEffect(() => {
     if (user && !loading) {
       console.log("🔄 Trigger fetchData - user:", user.role, "boutique:", selectedBoutique?.name || "All");
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, selectedBoutique, loading]);
 
   if (loading) {
@@ -195,6 +203,14 @@ const DashboardPage = () => {
       </div>
     );
   }
+
+  // calculs d'affichage sûrs
+  const todaySalesDisplay = Number(stats.today.sales || 0);
+  const todayTransDisplay = Number(stats.today.transactions || 0);
+  const monthSalesDisplay = Number(stats.month.sales || 0);
+  const monthTransDisplay = Number(stats.month.transactions || 0);
+  const quantiteVendueTotal = topProduits.reduce((sum, p) => sum + Number(p.quantiteVendue || 0), 0);
+  const produitsCount = topProduits.length;
 
   return (
     <div className="space-y-6">
@@ -220,6 +236,7 @@ const DashboardPage = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Sélecteur de boutique (ADMIN uniquement) */}
           {user.role === "admin" && (
             <div className="relative min-w-[200px]">
               <select
@@ -229,7 +246,6 @@ const DashboardPage = () => {
                   const boutique = e.target.value
                     ? boutiques.find(b => b._id === e.target.value)
                     : null;
-                  console.log("🔄 Selected boutique:", boutique);
                   setSelectedBoutique(boutique);
                 }}
                 className="appearance-none w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer text-sm font-medium transition-all hover:border-gray-400"
@@ -245,6 +261,7 @@ const DashboardPage = () => {
             </div>
           )}
 
+          {/* Bouton actualiser */}
           <button
             onClick={fetchData}
             disabled={loadingData}
@@ -258,15 +275,16 @@ const DashboardPage = () => {
 
       {/* CARTES STATISTIQUES */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Ventes du jour */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <p className="text-blue-100 text-sm font-medium">Ventes du jour</p>
               <h3 className="text-3xl font-bold mt-2">
-                {stats.today.sales.toLocaleString()} <span className="text-xl">FCFA</span>
+                {todaySalesDisplay.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-blue-100 text-sm mt-2">
-                {stats.today.transactions} transaction{stats.today.transactions !== 1 ? 's' : ''}
+                {todayTransDisplay} transaction{todayTransDisplay !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -275,15 +293,16 @@ const DashboardPage = () => {
           </div>
         </div>
 
+        {/* Ventes du mois */}
         <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <p className="text-green-100 text-sm font-medium">Ventes du mois</p>
               <h3 className="text-3xl font-bold mt-2">
-                {stats.month.sales.toLocaleString()} <span className="text-xl">FCFA</span>
+                {monthSalesDisplay.toLocaleString()} <span className="text-xl">FCFA</span>
               </h3>
               <p className="text-green-100 text-sm mt-2">
-                {stats.month.transactions} transaction{stats.month.transactions !== 1 ? 's' : ''}
+                {monthTransDisplay} transaction{monthTransDisplay !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -292,15 +311,16 @@ const DashboardPage = () => {
           </div>
         </div>
 
+        {/* Quantité vendue */}
         <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <p className="text-purple-100 text-sm font-medium">Quantité vendue</p>
               <h3 className="text-3xl font-bold mt-2">
-                {topProduits.reduce((sum, p) => sum + (p.quantiteVendue || 0), 0)}
+                {quantiteVendueTotal.toLocaleString()}
               </h3>
               <p className="text-purple-100 text-sm mt-2">
-                {topProduits.length} produit{topProduits.length !== 1 ? 's' : ''}
+                {produitsCount} produit{produitsCount !== 1 ? 's' : ''}
               </p>
             </div>
             <div className="p-3 bg-white/20 rounded-lg">
@@ -312,6 +332,7 @@ const DashboardPage = () => {
 
       {/* GRILLE VENTES & ALERTES */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Ventes récentes */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-blue-600" />
@@ -347,6 +368,7 @@ const DashboardPage = () => {
           </div>
         </div>
 
+        {/* Alertes Stock */}
         <div className="bg-white p-6 rounded-xl shadow">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-orange-600" />

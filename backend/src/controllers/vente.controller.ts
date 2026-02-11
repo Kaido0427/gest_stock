@@ -4,6 +4,7 @@ import { Vente } from "../models/vente.model.js";
 import { Produit } from "../models/produit.model.js";
 import { Boutique } from "../models/boutique.model.js";
 import type { Types } from "mongoose";
+import mongoose from "mongoose";
 
 // ✅ Helper function pour les conversions d'unités (même que dans produit.controller)
 const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number => {
@@ -258,97 +259,73 @@ export const getHistoriqueVentes = async (c: Context) => {
     }
 };
 
-// ➤ Statistiques des ventes
+
 export const getStatistiquesVentes = async (c: Context) => {
-    try {
-        const { periode = "jour", boutique_id } = c.req.query();
+  try {
+    const { periode = "jour", boutique_id } = c.req.query();
+    let matchStage: any = {};
 
-        let matchStage: any = {};
-
-        // ✅ Filtre direct par boutique_id
-        if (boutique_id) {
-            matchStage.boutique_id = boutique_id;
-        }
-
-        let groupFormat: any;
-        switch (periode) {
-            case "jour":
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" },
-                    day: { $dayOfMonth: "$date" }
-                };
-                break;
-            case "mois":
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" }
-                };
-                break;
-            case "annee":
-                groupFormat = { year: { $year: "$date" } };
-                break;
-            default:
-                groupFormat = {
-                    year: { $year: "$date" },
-                    month: { $month: "$date" },
-                    day: { $dayOfMonth: "$date" }
-                };
-        }
-
-        // Statistiques globales
-        const globalStats = await Vente.aggregate([
-            { $match: matchStage },
-            {
-                $group: {
-                    _id: null,
-                    totalVentes: { $sum: 1 },
-                    montantTotal: { $sum: "$totalAmount" },
-                    articlesVendus: {
-                        $sum: {
-                            $sum: "$items.quantitySold"
-                        }
-                    },
-                    moyennePanier: { $avg: "$totalAmount" }
-                }
-            }
-        ]);
-
-        // Top produits vendus
-        const topProduits = await Vente.aggregate([
-            { $match: matchStage },
-            { $unwind: "$items" },
-            {
-                $group: {
-                    _id: "$items.productId",
-                    productName: { $first: "$items.productName" },
-                    quantiteVendue: { $sum: "$items.quantitySold" },
-                    uniteBase: { $first: "$items.unitBase" },
-                    montantTotal: { $sum: "$items.total" }
-                }
-            },
-            { $sort: { quantiteVendue: -1 } },
-            { $limit: 10 }
-        ]);
-
-        return c.json({
-            success: true,
-            data: {
-                periode,
-                global: globalStats[0] || {
-                    totalVentes: 0,
-                    montantTotal: 0,
-                    articlesVendus: 0,
-                    moyennePanier: 0
-                },
-                topProduits
-            }
-        });
-    } catch (error) {
-        console.error("❌ Erreur:", error);
-        return c.json({ error: (error as Error).message }, 500);
+    // ✅ BON FILTRE BOUTIQUE
+    if (boutique_id) {
+      
+       matchStage.boutique_id = new mongoose.Types.ObjectId(boutique_id);
     }
+
+    const now = new Date();
+
+    if (periode === "jour") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      matchStage.date = { $gte: start, $lt: end };
+    }
+
+    if (periode === "mois") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      matchStage.date = { $gte: start, $lt: end };
+    }
+
+    const globalStats = await Vente.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: null,
+          totalVentes: { $sum: 1 },
+          montantTotal: { $sum: "$totalAmount" },
+          moyennePanier: { $avg: "$totalAmount" }
+        }
+      }
+    ]);
+
+    const topProduits = await Vente.aggregate([
+      { $match: matchStage },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: "$items.productId",
+          productName: { $first: "$items.productName" },
+          quantiteVendue: { $sum: "$items.quantitySold" }
+        }
+      }
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        global: globalStats[0] || {
+          totalVentes: 0,
+          montantTotal: 0,
+          moyennePanier: 0
+        },
+        topProduits
+      }
+    });
+  } catch (e) {
+    console.error(e);
+    return c.json({ error: "Erreur stats" }, 500);
+  }
 };
+
 
 // ➤ Récupérer toutes les boutiques (pour admin)
 export const getBoutiques = async (c: Context) => {
