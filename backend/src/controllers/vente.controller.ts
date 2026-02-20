@@ -267,7 +267,7 @@ export const getStatistiquesVentes = async (c: Context) => {
 
     // ✅ BON FILTRE BOUTIQUE
     if (boutique_id) {
-      
+        
        matchStage.boutique_id = new mongoose.Types.ObjectId(boutique_id);
     }
 
