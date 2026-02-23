@@ -15,7 +15,7 @@ jobs:
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Sync files to VPS
+      - name: Deploy files to VPS
         run: |
           sshpass -p "${{ secrets.VPS_PASSWORD }}" rsync -avz --delete \
             --exclude='.git' \
@@ -27,39 +27,17 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/gest_stock
 
-      - name: Build and start apps
+      - name: Run post-deployment commands
         run: |
           sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
           ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
-
             set -e
-
-            echo "📦 Backend install..."
-            cd /var/www/gest_stock/backend
+            cd /var/www/gest_stock
             npm install
-            npm run build
-
-            echo "🚀 Backend start..."
-            pm2 delete backend || true
-            pm2 start dist/index.js --name backend
-
-
-            echo "📦 Frontend install..."
-            cd /var/www/gest_stock/frontend
-            npm install
-            npm run build
-
-            echo "🚀 Frontend start..."
-            pm2 delete frontend || true
-            pm2 start npm --name frontend -- start
-
-
-            echo "💾 Save PM2..."
+            pm2 restart all || (
+              cd backend && pm2 start npm --name backend -- run dev &&
+              cd ../frontend && pm2 start npm --name frontend -- run dev
+            )
             pm2 save
-
-            echo "🔄 Restart Nginx..."
-            sudo systemctl restart nginx
-
-            echo "✅ Deploy finished"
-
+            echo "✅ Déploiement terminé"
           ENDSSH
