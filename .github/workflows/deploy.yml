@@ -21,7 +21,6 @@ jobs:
             --exclude='.git' \
             --exclude='.github' \
             --exclude='node_modules' \
-            --exclude='backend/dist' \
             --exclude='.env' \
             --exclude='backend/.env' \
             --exclude='frontend/.env' \
@@ -37,16 +36,8 @@ jobs:
           sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" "
             set -e &&
             cd /var/www/gest_stock &&
-            echo '📦 Installation complète (avec devDependencies pour le build)...' &&
             npm install &&
-            echo '🏗️ Build du backend (TypeScript)...' &&
-            npm run build --workspace=backend &&
-            echo '🏗️ Build du frontend...' &&
-            npm run build --workspace=frontend &&
-            echo '🧹 Suppression des devDependencies...' &&
-            npm prune --omit=dev &&
-            echo '🔄 Redémarrage PM2...' &&
-            (pm2 describe gest_backend > /dev/null 2>&1 && pm2 restart gest_backend || pm2 start backend/dist/index.js --name gest_backend) &&
+            (pm2 describe gest_backend > /dev/null 2>&1 && pm2 restart gest_backend || pm2 start --name gest_backend --cwd /var/www/gest_stock/backend npx -- tsx src/index.ts) &&
             pm2 save &&
             echo '✅ Déploiement terminé'
           "
