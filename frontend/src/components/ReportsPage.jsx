@@ -1,427 +1,602 @@
-import React, { useEffect, useState } from "react";
-import { Download, Calendar, ChevronLeft, ChevronRight, Store, ChevronDown, TrendingUp, Package, DollarSign } from "lucide-react";
-import { getHistoriqueVentes, getStatistiquesVentes, getBoutiques } from "../services/sale";
-import { getCurrentUser } from "../services/auth";
+import React, { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Toaster } from "react-hot-toast";
+import {
+  TrendingUp, ShoppingCart, Package, AlertTriangle,
+  RefreshCw, ChevronDown, Store, Calendar,
+  ArrowUpRight, ArrowDownRight, BarChart2,
+  Clock, Receipt, Filter, Search,
+} from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from "recharts";
+import { useStatistiques, useHistoriqueVentes, useAlertesStock } from "../hooks/useReports";
+import { useQuery } from "@tanstack/react-query";
+import { getAllBoutiques } from "../services/boutique";
 
-const StatCard = ({ title, value, subtitle, icon, color }) => (
-  <div className={`p-6 rounded-xl shadow-lg ${color.bg} border-2 ${color.border}`}>
-    <div className="flex justify-between items-start">
-      <div className="flex-1">
-        <p className={`text-sm font-medium ${color.textLight}`}>{title}</p>
-        <h3 className={`text-3xl font-bold mt-2 ${color.text}`}>
-          {value.toLocaleString()} <span className="text-xl">FCFA</span>
-        </h3>
-        {subtitle && (
-          <p className={`text-sm mt-2 ${color.textLight}`}>{subtitle}</p>
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (n) =>
+  typeof n === "number"
+    ? n.toLocaleString("fr-FR", { maximumFractionDigits: 0 })
+    : "0";
+
+const fmtDate = (d) =>
+  new Date(d).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const PERIODS = [
+  { key: "jour", label: "Aujourd'hui" },
+  { key: "mois", label: "Ce mois" },
+];
+
+// ─── Custom Tooltip ───────────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-slate-900 text-white px-3 py-2 rounded-xl text-xs shadow-xl">
+      <p className="font-bold mb-1 text-slate-300">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }}>
+          {p.name} : <span className="font-bold">{fmt(p.value)} FCFA</span>
+        </p>
+      ))}
+    </div>
+  );
+};
+
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, sub, icon: Icon, trend, delay, accent }) {
+  const accents = {
+    emerald: { bg: "bg-emerald-500", light: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-100" },
+    blue:    { bg: "bg-blue-500",    light: "bg-blue-50",    text: "text-blue-700",    border: "border-blue-100" },
+    amber:   { bg: "bg-amber-500",   light: "bg-amber-50",   text: "text-amber-700",   border: "border-amber-100" },
+    red:     { bg: "bg-red-500",     light: "bg-red-50",     text: "text-red-700",     border: "border-red-100" },
+  };
+  const c = accents[accent] ?? accents.blue;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, type: "spring", stiffness: 200, damping: 22 }}
+      className={`bg-white rounded-2xl border ${c.border} p-5 shadow-sm`}
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className={`w-10 h-10 rounded-xl ${c.light} flex items-center justify-center`}>
+          <Icon className={`w-5 h-5 ${c.text}`} />
+        </div>
+        {trend !== undefined && (
+          <div className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
+            trend >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
+          }`}>
+            {trend >= 0
+              ? <ArrowUpRight className="w-3 h-3" />
+              : <ArrowDownRight className="w-3 h-3" />
+            }
+            {Math.abs(trend)}%
+          </div>
         )}
       </div>
-      <div className={`p-3 ${color.iconBg} rounded-lg`}>
-        {React.cloneElement(icon, { className: `w-8 h-8 ${color.icon}` })}
-      </div>
-    </div>
-  </div>
-);
+      <p className="text-2xl font-black text-slate-900 leading-none mb-1">{value}</p>
+      <p className="text-xs text-slate-500 font-medium">{label}</p>
+      {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
+    </motion.div>
+  );
+}
 
-const VenteList = ({ ventes, page, pages, onPageChange }) => {
-  if (!ventes || ventes.length === 0)
-    return (
-      <div className="text-center py-12 text-gray-400">
-        <Package className="w-16 h-16 mx-auto mb-3 opacity-30" />
-        <p className="font-medium">Aucune vente disponible</p>
-        <p className="text-sm mt-1">Les ventes apparaîtront ici</p>
-      </div>
-    );
+// ─── Vente Row ────────────────────────────────────────────────────────────────
+function VenteRow({ vente, index }) {
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow">
-      <h2 className="text-xl font-bold text-gray-800 mb-4">Historique des ventes</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b-2 border-gray-200">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Produit</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Qté vendue</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Unité</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Prix unitaire</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {ventes.map((vente) =>
-              vente.items.map((item, idx) => (
-                <tr key={`${vente._id}-${idx}`} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {new Date(vente.date).toLocaleDateString('fr-FR', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{item.productName}</div>
-                    {item.unitSold !== item.unitBase && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        Converti: {item.quantityDeducted} {item.unitBase}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-gray-900">
-                    {item.quantitySold}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                      {item.unitSold}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-green-700 font-medium">
-                    {item.unitPrice.toLocaleString()} FCFA
-                  </td>
-                  <td className="px-4 py-3 font-bold text-green-700">
-                    {item.total.toLocaleString()} FCFA
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className="bg-white rounded-xl border border-slate-200 overflow-hidden"
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+            <Receipt className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-bold text-slate-800">
+              {fmt(vente.totalAmount)} FCFA
+            </p>
+            <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+              <Clock className="w-3 h-3" />
+              {fmtDate(vente.date)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full font-medium">
+            {vente.items?.length ?? 0} article{(vente.items?.length ?? 0) > 1 ? "s" : ""}
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        </div>
+      </button>
 
-      {/* Pagination */}
-      <div className="flex justify-center items-center gap-4 mt-6">
-        <button
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          className="p-2 border-2 border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-        >
-          <ChevronLeft className="w-5 h-5 text-gray-600" />
-        </button>
-        <span className="text-sm font-medium text-gray-700">
-          Page <span className="font-bold">{page}</span> sur <span className="font-bold">{pages}</span>
-        </span>
-        <button
-          disabled={page >= pages}
-          onClick={() => onPageChange(page + 1)}
-          className="p-2 border-2 border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-        >
-          <ChevronRight className="w-5 h-5 text-gray-600" />
-        </button>
-      </div>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-2">
+              {vente.items?.map((item, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                    <span className="text-slate-700 font-medium">{item.productName}</span>
+                    <span className="text-slate-400 text-xs">
+                      {item.quantitySold} {item.unitSold}
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-800">{fmt(item.total)} FCFA</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ─── Top Produits ─────────────────────────────────────────────────────────────
+function TopProduits({ data = [] }) {
+  if (!data.length) return (
+    <div className="text-center py-8 text-slate-400 text-sm">
+      Aucune donnée disponible
     </div>
   );
-};
 
-const ReportsPage = () => {
-  const [user, setUser] = useState(null);
-  const [boutiques, setBoutiques] = useState([]);
-  const [selectedBoutique, setSelectedBoutique] = useState(null);
-  const [stats, setStats] = useState({
-    today: { montant: 0, transactions: 0 },
-    month: { montant: 0, transactions: 0 },
-    year: { montant: 0, transactions: 0 }
-  });
-  const [topProducts, setTopProducts] = useState([]);
-  const [ventes, setVentes] = useState([]);
-  const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [loadingData, setLoadingData] = useState(false);
-
-  // Charger l'utilisateur et les boutiques
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await getCurrentUser();
-        if (!currentUser) {
-          setLoading(false);
-          return;
-        }
-
-        setUser(currentUser);
-
-        // Charger les boutiques
-        const boutiquesData = await getBoutiques();
-
-        let boutiquesArray = [];
-        if (Array.isArray(boutiquesData)) {
-          boutiquesArray = boutiquesData;
-        } else if (boutiquesData?.success && boutiquesData?.data) {
-          boutiquesArray = boutiquesData.data;
-        } else if (boutiquesData?.data && Array.isArray(boutiquesData.data)) {
-          boutiquesArray = boutiquesData.data;
-        }
-
-        if (boutiquesArray.length > 0) {
-          if (currentUser.role === "admin") {
-            setBoutiques(boutiquesArray);
-          } else if (currentUser.role === "employe" && currentUser.boutique) {
-            const maBoutique = boutiquesArray.find(b => b._id === currentUser.boutique.id);
-            if (maBoutique) {
-              setBoutiques([maBoutique]);
-              setSelectedBoutique(maBoutique);
-            }
-          }
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error("Error loadUser:", error);
-        setLoading(false);
-      }
-    };
-
-    loadUser();
-  }, []);
-
-  const fetchStats = async () => {
-    setLoadingData(true);
-
-    try {
-      // Déterminer l'ID de la boutique à filtrer
-      let boutiqueId = null;
-      if (user?.role === "employe" && user.boutique) {
-        boutiqueId = user.boutique.id;
-      } else if (user?.role === "admin" && selectedBoutique) {
-        boutiqueId = selectedBoutique._id;
-      }
-
-      // Stats du jour
-      const statsJourData = await getStatistiquesVentes("jour", boutiqueId);
-      // Stats du mois
-      const statsMoisData = await getStatistiquesVentes("mois", boutiqueId);
-      // Stats de l'année
-      const statsAnneeData = await getStatistiquesVentes("annee", boutiqueId);
-
-      if (statsJourData?.success) {
-        const globalJour = statsJourData.data?.global || {};
-        const globalMois = statsMoisData?.data?.global || {};
-        const globalAnnee = statsAnneeData?.data?.global || {};
-
-        setStats({
-          today: {
-            montant: globalJour.montantTotal || 0,
-            transactions: globalJour.totalVentes || 0
-          },
-          month: {
-            montant: globalMois.montantTotal || 0,
-            transactions: globalMois.totalVentes || 0
-          },
-          year: {
-            montant: globalAnnee.montantTotal || 0,
-            transactions: globalAnnee.totalVentes || 0
-          }
-        });
-
-        setTopProducts(statsJourData.data?.topProduits || []);
-      }
-    } catch (error) {
-      console.error("Error fetchStats:", error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  const fetchVentes = async (p = 1) => {
-    setLoadingData(true);
-
-    try {
-      let boutiqueId = null;
-      if (user?.role === "employe" && user.boutique) {
-        boutiqueId = user.boutique.id;
-      } else if (user?.role === "admin" && selectedBoutique) {
-        boutiqueId = selectedBoutique._id;
-      }
-
-      const data = await getHistoriqueVentes({ limit: 10, page: p, boutiqueId });
-
-      if (data?.success) {
-        setVentes(data.data.ventes || []);
-        setPage(data.data.pagination?.page || 1);
-        setPages(data.data.pagination?.pages || 1);
-      }
-    } catch (error) {
-      console.error("Error fetchVentes:", error);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  // Charger les données quand user ou selectedBoutique change
-  useEffect(() => {
-    if (user && !loading) {
-      fetchStats();
-      fetchVentes(1);
-    }
-  }, [user, selectedBoutique, loading]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  const handleExportPDF = () => {
-    alert("Fonctionnalité d'export PDF à venir");
-  };
+  const max = Math.max(...data.map((d) => d.quantiteVendue));
 
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Rapports de ventes</h1>
-          <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
-            <Store className="w-4 h-4" />
-            {selectedBoutique ? selectedBoutique.name : user?.role === "admin" && "Toutes les boutiques"}
-          </p>
-        </div>
+    <div className="space-y-3">
+      {data.slice(0, 8).map((p, i) => (
+        <motion.div
+          key={p._id}
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.06 }}
+          className="flex items-center gap-3"
+        >
+          <span className="w-6 text-xs font-black text-slate-400 text-right flex-shrink-0">
+            #{i + 1}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold text-slate-700 truncate">
+                {p.productName}
+              </span>
+              <span className="text-xs font-bold text-slate-500 ml-2 flex-shrink-0">
+                {fmt(p.quantiteVendue)}
+              </span>
+            </div>
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(p.quantiteVendue / max) * 100}%` }}
+                transition={{ delay: i * 0.06 + 0.2, duration: 0.5 }}
+                className={`h-full rounded-full ${
+                  i === 0 ? "bg-indigo-500" :
+                  i === 1 ? "bg-blue-400" :
+                  i === 2 ? "bg-cyan-400" :
+                  "bg-slate-300"
+                }`}
+              />
+            </div>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
 
-        <div className="flex items-center gap-3">
-          {/* Sélecteur de boutique (ADMIN uniquement) */}
-          {user?.role === "admin" && (
-            <div className="relative min-w-[200px]">
-              <select
-                value={selectedBoutique?._id || ""}
-                onChange={(e) => {
-                  const boutique = e.target.value
-                    ? boutiques.find(b => b._id === e.target.value)
-                    : null;
-                  setSelectedBoutique(boutique);
-                  setPage(1);
-                }}
-                className="appearance-none w-full bg-white border-2 border-gray-300 rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer text-sm font-medium transition-all hover:border-gray-400"
-              >
-                <option value="">📊 Toutes les boutiques</option>
-                {boutiques.map(b => (
-                  <option key={b._id} value={b._id}>
-                    🏪 {b.name}
-                  </option>
+// ─── Alert Stock Row ──────────────────────────────────────────────────────────
+function AlerteRow({ produit, index }) {
+  const pct = Math.min((produit.stock / 10) * 100, 100);
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.04 }}
+      className="flex items-center gap-3 p-3 bg-white rounded-xl border border-amber-100"
+    >
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+        produit.stock === 0 ? "bg-red-100" : "bg-amber-100"
+      }`}>
+        <Package className={`w-4 h-4 ${produit.stock === 0 ? "text-red-600" : "text-amber-600"}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800 truncate">{produit.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full ${produit.stock === 0 ? "bg-red-400" : "bg-amber-400"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <span className={`text-xs font-bold flex-shrink-0 ${
+            produit.stock === 0 ? "text-red-600" : "text-amber-600"
+          }`}>
+            {produit.stock} {produit.unit}
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Skeleton loader ──────────────────────────────────────────────────────────
+function Skeleton({ className }) {
+  return <div className={`bg-slate-200 animate-pulse rounded-xl ${className}`} />;
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+const RapportsPage = () => {
+  const [periode, setPeriode] = useState("jour");
+  const [selectedBoutique, setSelectedBoutique] = useState("");
+  const [searchVente, setSearchVente] = useState("");
+
+  const { data: boutiques = [] } = useQuery({
+    queryKey: ["boutiques"],
+    queryFn: async () => {
+      const res = await getAllBoutiques();
+      if (res.error) throw new Error(res.error);
+      return Array.isArray(res) ? res : res.boutiques ?? [];
+    },
+    staleTime: 60_000,
+  });
+
+  const {
+    data: stats,
+    isLoading: loadingStats,
+    refetch: refetchStats,
+    dataUpdatedAt,
+  } = useStatistiques(periode, selectedBoutique || null);
+
+  const {
+    data: historiqueData,
+    isLoading: loadingHistorique,
+  } = useHistoriqueVentes({
+    limit: 50,
+    boutiqueId: selectedBoutique || undefined,
+  });
+
+  const {
+    data: alertes = [],
+    isLoading: loadingAlertes,
+  } = useAlertesStock(10, selectedBoutique || null);
+
+  const ventes = historiqueData?.ventes ?? [];
+  const statsGlobal = stats?.global ?? {};
+  const topProduits = stats?.topProduits ?? [];
+
+  // Filtrage ventes par recherche
+  const filteredVentes = useMemo(() => {
+    if (!searchVente) return ventes;
+    return ventes.filter((v) =>
+      v.items?.some((i) =>
+        i.productName?.toLowerCase().includes(searchVente.toLowerCase())
+      )
+    );
+  }, [ventes, searchVente]);
+
+  // Données pour le graphique évolution
+  const chartData = useMemo(() => {
+    const map = {};
+    ventes.forEach((v) => {
+      const d = new Date(v.date);
+      const key = periode === "jour"
+        ? `${d.getHours()}h`
+        : `${d.getDate()}/${d.getMonth() + 1}`;
+      map[key] = (map[key] || 0) + v.totalAmount;
+    });
+    return Object.entries(map)
+      .map(([label, montant]) => ({ label, montant }))
+      .slice(-12);
+  }, [ventes, periode]);
+
+  const lastUpdate = dataUpdatedAt
+    ? new Date(dataUpdatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <>
+      <Toaster position="top-right" />
+      <div className="min-h-screen bg-[#f5f6fa] p-3 sm:p-6">
+        <div className="max-w-7xl mx-auto space-y-5">
+
+          {/* ── HEADER ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                Rapports
+              </h1>
+              {lastUpdate && (
+                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Mis à jour à {lastUpdate}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Filtre boutique */}
+              <div className="relative">
+                <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <select
+                  value={selectedBoutique}
+                  onChange={(e) => setSelectedBoutique(e.target.value)}
+                  className="appearance-none pl-9 pr-8 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 text-slate-700 font-medium shadow-sm"
+                >
+                  <option value="">Toutes les boutiques</option>
+                  {boutiques.map((b) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Sélecteur période */}
+              <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => setPeriode(p.key)}
+                    className={`px-3 py-2.5 text-sm font-semibold transition-colors ${
+                      periode === p.key
+                        ? "bg-slate-900 text-white"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
                 ))}
-              </select>
-              <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+
+              <button
+                onClick={refetchStats}
+                className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-700 shadow-sm transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingStats ? "animate-spin" : ""}`} />
+              </button>
             </div>
-          )}
+          </div>
 
-          <button
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition-colors shadow-sm font-medium"
-          >
-            <Download className="w-4 h-4" />
-            Exporter PDF
-          </button>
-        </div>
-      </div>
+          {/* ── KPI CARDS ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {loadingStats ? (
+              Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-28" />)
+            ) : (
+              <>
+                <KpiCard
+                  label="Chiffre d'affaires"
+                  value={`${fmt(statsGlobal.montantTotal)} FCFA`}
+                  sub={`Moy. ${fmt(statsGlobal.moyennePanier)} FCFA/vente`}
+                  icon={TrendingUp}
+                  accent="emerald"
+                  delay={0.05}
+                />
+                <KpiCard
+                  label="Ventes"
+                  value={fmt(statsGlobal.totalVentes)}
+                  sub="transactions"
+                  icon={ShoppingCart}
+                  accent="blue"
+                  delay={0.1}
+                />
+                <KpiCard
+                  label="Panier moyen"
+                  value={`${fmt(statsGlobal.moyennePanier)} FCFA`}
+                  icon={BarChart2}
+                  accent="amber"
+                  delay={0.15}
+                />
+                <KpiCard
+                  label="Alertes stock"
+                  value={alertes.length}
+                  sub="produits à réappro."
+                  icon={AlertTriangle}
+                  accent={alertes.length > 0 ? "red" : "emerald"}
+                  delay={0.2}
+                />
+              </>
+            )}
+          </div>
 
-      {/* STATISTIQUES */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard
-          title="Ventes du jour"
-          value={stats.today.montant}
-          subtitle={`${stats.today.transactions} transaction${stats.today.transactions !== 1 ? 's' : ''}`}
-          icon={<Calendar />}
-          color={{
-            bg: "bg-gradient-to-br from-blue-500 to-blue-600",
-            border: "border-blue-600",
-            text: "text-white",
-            textLight: "text-blue-100",
-            icon: "text-white",
-            iconBg: "bg-white/20"
-          }}
-        />
-        <StatCard
-          title="Ventes du mois"
-          value={stats.month.montant}
-          subtitle={`${stats.month.transactions} transaction${stats.month.transactions !== 1 ? 's' : ''}`}
-          icon={<TrendingUp />}
-          color={{
-            bg: "bg-gradient-to-br from-green-500 to-green-600",
-            border: "border-green-600",
-            text: "text-white",
-            textLight: "text-green-100",
-            icon: "text-white",
-            iconBg: "bg-white/20"
-          }}
-        />
-        <StatCard
-          title="Ventes de l'année"
-          value={stats.year.montant}
-          subtitle={`${stats.year.transactions} transaction${stats.year.transactions !== 1 ? 's' : ''}`}
-          icon={<DollarSign />}
-          color={{
-            bg: "bg-gradient-to-br from-purple-500 to-purple-600",
-            border: "border-purple-600",
-            text: "text-white",
-            textLight: "text-purple-100",
-            icon: "text-white",
-            iconBg: "bg-white/20"
-          }}
-        />
-      </div>
-
-      {/* TOP PRODUITS */}
-      <div className="bg-white p-6 rounded-xl shadow">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5 text-blue-600" />
-          Top produits vendus
-        </h2>
-        <div className="space-y-4">
-          {topProducts.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <Package className="w-16 h-16 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Aucune donnée disponible</p>
-              <p className="text-sm mt-1">Les produits les plus vendus apparaîtront ici</p>
+          {/* ── GRAPHIQUE ÉVOLUTION ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="font-black text-slate-900">Évolution des ventes</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {periode === "jour" ? "Par heure" : "Par jour"}
+                </p>
+              </div>
             </div>
-          ) : (
-            topProducts.map((product, i) => (
-              <div key={product._id || i} className="flex items-center gap-4 p-4 bg-gradient-to-r from-gray-50 to-white rounded-lg border border-gray-100 hover:shadow-md transition-all">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0 shadow-lg">
-                  {i + 1}
+
+            {chartData.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-slate-400 text-sm">
+                Aucune donnée pour cette période
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorMontant" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                    width={36}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="montant"
+                    name="Montant"
+                    stroke="#6366f1"
+                    strokeWidth={2.5}
+                    fill="url(#colorMontant)"
+                    dot={false}
+                    activeDot={{ r: 5, fill: "#6366f1" }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* ── 2 COLONNES : Top produits + Alertes stock ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* Top produits */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
+                  <BarChart2 className="w-4 h-4 text-indigo-600" />
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{product.productName}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="flex-1 bg-gray-200 rounded-full h-2.5">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${Math.min(100, (product.quantiteVendue / Math.max(...topProducts.map(p => p.quantiteVendue))) * 100)}%`
-                        }}
-                      ></div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-blue-600">
-                        {product.quantiteVendue} {product.uniteBase || ''}
-                      </div>
-                      <div className="text-xs text-gray-500">vendus</div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    Valeur: <span className="font-semibold text-green-600">
-                      {product.montantTotal?.toLocaleString() || 0} FCFA
-                    </span>
-                  </div>
+                <div>
+                  <h2 className="font-black text-slate-900 text-sm">Top produits vendus</h2>
+                  <p className="text-xs text-slate-400">Par quantité</p>
                 </div>
               </div>
-            ))
-          )}
+              {loadingStats ? (
+                <div className="space-y-3">
+                  {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-8" />)}
+                </div>
+              ) : (
+                <TopProduits data={topProduits} />
+              )}
+            </div>
+
+            {/* Alertes stock */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-slate-900 text-sm">Alertes stock</h2>
+                    <p className="text-xs text-slate-400">Seuil &lt; 10 unités</p>
+                  </div>
+                </div>
+                {alertes.length > 0 && (
+                  <span className="text-xs font-bold bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                    {alertes.length} produit{alertes.length > 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+
+              {loadingAlertes ? (
+                <div className="space-y-2">
+                  {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-14" />)}
+                </div>
+              ) : alertes.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <Package className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">Stocks OK</p>
+                  <p className="text-xs text-slate-400">Tous les produits sont bien approvisionnés</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {alertes.map((p, i) => (
+                    <AlerteRow key={p._id} produit={p} index={i} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── HISTORIQUE VENTES ── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center">
+                  <Receipt className="w-4 h-4 text-slate-600" />
+                </div>
+                <div>
+                  <h2 className="font-black text-slate-900 text-sm">Historique des ventes</h2>
+                  <p className="text-xs text-slate-400">
+                    {filteredVentes.length} transaction{filteredVentes.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+
+              {/* Recherche vente */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Rechercher un produit…"
+                  value={searchVente}
+                  onChange={(e) => setSearchVente(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 w-full sm:w-52 placeholder-slate-400 text-slate-700"
+                />
+              </div>
+            </div>
+
+            {loadingHistorique ? (
+              <div className="space-y-2">
+                {Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-16" />)}
+              </div>
+            ) : filteredVentes.length === 0 ? (
+              <div className="text-center py-12">
+                <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-sm font-semibold text-slate-600">Aucune vente</p>
+                <p className="text-xs text-slate-400">
+                  {searchVente ? "Aucun résultat pour cette recherche" : "Aucune vente enregistrée"}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                <AnimatePresence>
+                  {filteredVentes.map((vente, i) => (
+                    <VenteRow key={vente._id} vente={vente} index={i} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
-
-      {/* HISTORIQUE DES VENTES */}
-      {loadingData ? (
-        <div className="bg-white p-12 rounded-xl shadow text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-gray-500 mt-4">Chargement des données...</p>
-        </div>
-      ) : (
-        <VenteList ventes={ventes} page={page} pages={pages} onPageChange={fetchVentes} />
-      )}
-    </div>
+    </>
   );
 };
 
-export default ReportsPage;
+export default RapportsPage;
