@@ -28,20 +28,16 @@ jobs:
             ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/var/www/gest_stock
 
       - name: Run post-deployment commands
-        env:
-          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
-          sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no "$VPS_USER@$VPS_HOST" "
-            set -e &&
-            echo '📦 Installation des dépendances...' &&
-            cd /var/www/gest_stock &&
-            npm install --omit=dev &&
-            echo '🏗️ Build du frontend...' &&
-            npm run build --workspace=frontend &&
-            echo '🔄 Redémarrage PM2...' &&
-            (pm2 describe backend > /dev/null 2>&1 && pm2 restart backend || pm2 start backend/src/index.js --name backend) &&
-            pm2 save &&
-            echo '✅ Déploiement terminé'
-          "
+          sshpass -p "${{ secrets.VPS_PASSWORD }}" ssh -o StrictHostKeyChecking=no \
+          ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+            set -e
+            cd /var/www/gest_stock
+            npm install
+            pm2 restart all || (
+              cd backend && pm2 start npm --name backend -- run dev &&
+              cd ../frontend && pm2 start npm --name frontend -- run dev
+            )
+            pm2 save
+            echo "✅ Déploiement terminé"
+          ENDSSH
