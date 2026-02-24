@@ -1,148 +1,60 @@
 // frontend/src/services/product.js
-const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/produit` : "http://localhost:3000/produit";
+const API_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/produit`
+  : "http://localhost:3000/produit";
 
-// ✅ NOUVELLE FONCTION : Créer un produit dans plusieurs boutiques
-export async function addProduitMultiBoutiques(produitData) {
+// ─── helpers ──────────────────────────────────────────────────────────────────
+async function apiFetch(url, options = {}) {
   try {
-    const res = await fetch(`${API_URL}/multi-boutiques`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(produitData),
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur lors de la création" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ 1. Créer un produit (ancienne méthode - une seule boutique)
-export async function addProduit(produit) {
-  try {
-    const res = await fetch(`${API_URL}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(produit),
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur lors de la création" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ 2. Récupérer tous les produits
-export async function getProduits() {
-  try {
-    const res = await fetch(`${API_URL}`);
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur récupération produits" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ 3. Récupérer un produit par ID
-export async function getProduit(id) {
-  try {
-    const res = await fetch(`${API_URL}/${id}`);
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Produit introuvable" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ 4. Modifier un produit
-export async function updateProduit(id, updates) {
-  try {
-    const res = await fetch(`${API_URL}/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(updates),
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur modification produit" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ➤ 5. Supprimer un produit
-export async function deleteProduit(id) {
-  try {
-    const res = await fetch(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur suppression produit" };
-    return data;
-  } catch (err) {
-    return { error: "Serveur injoignable" };
-  }
-}
-
-// ✅ Approvisionner un produit
-export const approvisionnerProduit = async (productId, data) => {
-  try {
-    const res = await fetch(`${API_URL}/${productId}/approvisionner`, {
-      method: "POST",
+    const res = await fetch(url, {
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      ...options,
     });
-    
-    if (!res.ok) {
-      const errorData = await res.json();
-      return { error: errorData.error || `Erreur HTTP: ${res.status}` };
-    }
-    
-    return await res.json();
-  } catch (error) {
-    console.error("Erreur approvisionnerProduit:", error);
-    return { error: error.message };
-  }
-};
-
-// ✅ Transfert de stock entre boutiques
-export const transfertStockBoutiques = async (data) => {
-  try {
-    const res = await fetch(`${API_URL}/transfert-stock`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    
-    if (!res.ok) {
-      const errorData = await res.json();
-      return { error: errorData.error || `Erreur HTTP: ${res.status}` };
-    }
-    
-    return await res.json();
-  } catch (error) {
-    console.error("Erreur transfertStockBoutiques:", error);
-    return { error: error.message };
-  }
-};
-
-// ➤ Récupérer les produits par boutique
-export async function getProduitsByBoutique(boutiqueId) {
-  try {
-    const res = await fetch(`${API_URL}/boutique/${boutiqueId}`);
     const data = await res.json();
-    if (!res.ok) return { error: data.error || "Erreur récupération produits" };
+    if (!res.ok) return { error: data.error || `Erreur HTTP ${res.status}` };
     return data;
-  } catch (err) {
+  } catch {
     return { error: "Serveur injoignable" };
   }
 }
+
+// ─── CREATE ───────────────────────────────────────────────────────────────────
+export const addProduitMultiBoutiques = (produitData) =>
+  apiFetch(`${API_URL}/multi-boutiques`, { method: "POST", body: JSON.stringify(produitData) });
+
+export const addProduit = (produit) =>
+  apiFetch(`${API_URL}`, { method: "POST", body: JSON.stringify(produit) });
+
+// ─── READ ─────────────────────────────────────────────────────────────────────
+
+// ✅ FIX : Support pagination + filtre boutique côté API
+// params: { page, limit, boutique_id }
+export async function getProduits(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.page)       qs.set("page", params.page);
+  if (params.limit)      qs.set("limit", params.limit);
+  if (params.boutique_id) qs.set("boutique_id", params.boutique_id);
+
+  const query = qs.toString() ? `?${qs}` : "";
+  return apiFetch(`${API_URL}${query}`);
+}
+
+export const getProduit = (id) => apiFetch(`${API_URL}/${id}`);
+
+export const getProduitsByBoutique = (boutiqueId) =>
+  apiFetch(`${API_URL}/boutique/${boutiqueId}`);
+
+// ─── UPDATE ───────────────────────────────────────────────────────────────────
+export const updateProduit = (id, updates) =>
+  apiFetch(`${API_URL}/${id}`, { method: "PUT", body: JSON.stringify(updates) });
+
+// ─── DELETE ───────────────────────────────────────────────────────────────────
+export const deleteProduit = (id) =>
+  apiFetch(`${API_URL}/${id}`, { method: "DELETE" });
+
+// ─── STOCK OPS ────────────────────────────────────────────────────────────────
+export const approvisionnerProduit = (productId, data) =>
+  apiFetch(`${API_URL}/${productId}/approvisionner`, { method: "POST", body: JSON.stringify(data) });
+
+export const transfertStockBoutiques = (data) =>
+  apiFetch(`${API_URL}/transfert-stock`, { method: "POST", body: JSON.stringify(data) });

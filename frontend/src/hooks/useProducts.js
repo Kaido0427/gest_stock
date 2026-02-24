@@ -14,21 +14,30 @@ import {
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 export const productKeys = {
-    all: ["produits"],
+    all: (params = {}) => ["produits", params],
     byBoutique: (id) => ["produits", "boutique", id],
 };
 
 // ─── READ ─────────────────────────────────────────────────────────────────────
-export function useProduits() {
+
+// ✅ FIX #7 : Supporte la pagination + filtre boutique via params
+// params: { page, limit, boutique_id }
+export function useProduits(params = {}) {
     return useQuery({
-        queryKey: productKeys.all,
+        queryKey: productKeys.all(params),
         queryFn: async () => {
-            const res = await getProduits();
+            const res = await getProduits(params);
             if (res.error) throw new Error(res.error);
-            // L'API peut renvoyer un tableau directement ou { produits: [] }
-            return Array.isArray(res) ? res : res.produits ?? [];
+
+            // Gère l'ancien format (tableau) et le nouveau (paginé)
+            if (Array.isArray(res)) return { produits: res, pagination: null };
+            if (res.produits) return res;
+            return { produits: [], pagination: null };
         },
-        staleTime: 30_000, // 30s avant re-fetch automatique
+        // ✅ FIX : staleTime plus long → moins de refetch inutiles
+        staleTime: 2 * 60 * 1000,  // 2 minutes (était 30s)
+        gcTime: 5 * 60 * 1000,   // garde en cache 5min après unmount
+        select: (data) => data,     // accès à data.produits + data.pagination
     });
 }
 
@@ -41,14 +50,14 @@ export function useProduitsByBoutique(boutiqueId) {
             return Array.isArray(res) ? res : res.produits ?? [];
         },
         enabled: Boolean(boutiqueId),
-        staleTime: 30_000,
+        staleTime: 2 * 60 * 1000,
+        gcTime: 5 * 60 * 1000,
     });
 }
 
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 export function useAddProduit() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (produit) => {
             const res = await addProduit(produit);
@@ -56,18 +65,15 @@ export function useAddProduit() {
             return res;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
+            queryClient.invalidateQueries({ queryKey: ["produits"] });
             toast.success("Produit créé avec succès !");
         },
-        onError: (err) => {
-            toast.error(err.message || "Erreur lors de la création");
-        },
+        onError: (err) => toast.error(err.message || "Erreur lors de la création"),
     });
 }
 
 export function useAddProduitMultiBoutiques() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (produitData) => {
             const res = await addProduitMultiBoutiques(produitData);
@@ -75,112 +81,98 @@ export function useAddProduitMultiBoutiques() {
             return res;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
+            queryClient.invalidateQueries({ queryKey: ["produits"] });
             toast.success("Produit créé dans toutes les boutiques !");
         },
-        onError: (err) => {
-            toast.error(err.message || "Erreur lors de la création multi-boutiques");
-        },
+        onError: (err) => toast.error(err.message || "Erreur création multi-boutiques"),
     });
 }
 
 // ─── UPDATE ───────────────────────────────────────────────────────────────────
 export function useUpdateProduit() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({ id, updates }) => {
             const res = await updateProduit(id, updates);
             if (res.error) throw new Error(res.error);
             return res;
         },
-        // Optimistic update : on met à jour le cache AVANT la réponse serveur
+        // ✅ Optimistic update conservé
         onMutate: async ({ id, updates }) => {
-            await queryClient.cancelQueries({ queryKey: productKeys.all });
-            const previous = queryClient.getQueryData(productKeys.all);
+            await queryClient.cancelQueries({ queryKey: ["produits"] });
+            const snapshots = queryClient.getQueriesData({ queryKey: ["produits"] });
 
-            queryClient.setQueryData(productKeys.all, (old = []) =>
-                old.map((p) => (p._id === id ? { ...p, ...updates } : p))
-            );
+            queryClient.setQueriesData({ queryKey: ["produits"] }, (old) => {
+                if (!old) return old;
+                const list = Array.isArray(old) ? old : old.produits;
+                const updated = list?.map((p) => (p._id === id ? { ...p, ...updates } : p));
+                return Array.isArray(old) ? updated : { ...old, produits: updated };
+            });
 
-            return { previous };
+            return { snapshots };
         },
         onError: (err, _vars, ctx) => {
-            // Rollback si erreur
-            if (ctx?.previous) {
-                queryClient.setQueryData(productKeys.all, ctx.previous);
-            }
+            ctx?.snapshots?.forEach(([key, val]) => queryClient.setQueryData(key, val));
             toast.error(err.message || "Erreur lors de la modification");
         },
-        onSuccess: () => {
-            toast.success("Produit mis à jour !");
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
-        },
+        onSuccess: () => toast.success("Produit mis à jour !"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["produits"] }),
     });
 }
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 export function useDeleteProduit() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (id) => {
             const res = await deleteProduit(id);
             if (res.error) throw new Error(res.error);
             return res;
         },
-        // Optimistic delete
+        // ✅ Optimistic delete
         onMutate: async (id) => {
-            await queryClient.cancelQueries({ queryKey: productKeys.all });
-            const previous = queryClient.getQueryData(productKeys.all);
+            await queryClient.cancelQueries({ queryKey: ["produits"] });
+            const snapshots = queryClient.getQueriesData({ queryKey: ["produits"] });
 
-            queryClient.setQueryData(productKeys.all, (old = []) =>
-                old.filter((p) => p._id !== id)
-            );
+            queryClient.setQueriesData({ queryKey: ["produits"] }, (old) => {
+                if (!old) return old;
+                const list = Array.isArray(old) ? old : old.produits;
+                const filtered = list?.filter((p) => p._id !== id);
+                return Array.isArray(old) ? filtered : { ...old, produits: filtered };
+            });
 
-            return { previous };
+            return { snapshots };
         },
         onError: (err, _id, ctx) => {
-            if (ctx?.previous) {
-                queryClient.setQueryData(productKeys.all, ctx.previous);
-            }
+            ctx?.snapshots?.forEach(([key, val]) => queryClient.setQueryData(key, val));
             toast.error(err.message || "Erreur lors de la suppression");
         },
-        onSuccess: () => {
-            toast.success("Produit supprimé");
-        },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
-        },
+        onSuccess: () => toast.success("Produit supprimé"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ["produits"] }),
     });
 }
 
 // ─── APPROVISIONNER ───────────────────────────────────────────────────────────
 export function useApprovisionner() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({ productId, data }) => {
             const res = await approvisionnerProduit(productId, data);
             if (res.error) throw new Error(res.error);
             return res;
         },
-        onSuccess: (_, { data }) => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
-            toast.success(`Stock mis à jour (+${data.quantite} ajoutés) !`);
+        onSuccess: (res) => {
+            queryClient.invalidateQueries({ queryKey: ["produits"] });
+            const added = res?.produit?.quantityAdded ?? "";
+            toast.success(`Stock mis à jour (+${added} ajoutés) !`);
         },
-        onError: (err) => {
-            toast.error(err.message || "Erreur approvisionnement");
-        },
+        onError: (err) => toast.error(err.message || "Erreur approvisionnement"),
     });
 }
 
 // ─── TRANSFERT STOCK ─────────────────────────────────────────────────────────
 export function useTransfertStock() {
     const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (data) => {
             const res = await transfertStockBoutiques(data);
@@ -188,11 +180,9 @@ export function useTransfertStock() {
             return res;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: productKeys.all });
+            queryClient.invalidateQueries({ queryKey: ["produits"] });
             toast.success("Transfert de stock effectué !");
         },
-        onError: (err) => {
-            toast.error(err.message || "Erreur lors du transfert");
-        },
+        onError: (err) => toast.error(err.message || "Erreur lors du transfert"),
     });
 }
