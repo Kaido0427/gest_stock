@@ -117,24 +117,26 @@ export const createProduit = async (c: Context) => {
     }
 };
 
-// ─── Voir tous les produits ──────────────────────────────────────────────────
 export const getAllProduits = async (c: Context) => {
     try {
-        // ✅ Récupération de tous les paramètres, y compris search
+        // Récupérer tous les paramètres, y compris search
         const { page = "1", limit = "50", boutique_id, search } = c.req.query();
         const pageNum = Math.max(1, parseInt(page));
-        const limitNum = Math.min(200, Math.max(1, parseInt(limit))); // max 200 par page
+        const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
         const skip = (pageNum - 1) * limitNum;
 
         const filter: any = {};
         if (boutique_id) filter.boutique_id = boutique_id;
-        
-        // ✅ AJOUT : Si un terme de recherche est fourni, on filtre sur le nom
+
+        // 🔥 FILTRE SUR LE NOM (et éventuellement description/catégorie)
         if (search && search.trim() !== "") {
-            filter.name = { $regex: search, $options: "i" }; // insensible à la casse
+            filter.$or = [
+                { name: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } },
+                { category: { $regex: search, $options: "i" } }
+            ];
         }
 
-        // Lancer count et find en parallèle
         const [produits, total] = await Promise.all([
             Produit.find(filter)
                 .populate("boutique_id", "name address")
@@ -159,6 +161,7 @@ export const getAllProduits = async (c: Context) => {
         return c.json({ error: (error as Error).message }, 500);
     }
 };
+
 // ─── Voir tous les produits d'une boutique ───────────────────────────────────
 export const getProduitsByBoutique = async (c: Context) => {
     try {

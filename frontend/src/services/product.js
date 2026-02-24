@@ -34,7 +34,7 @@ export async function getProduits(params = {}) {
   if (params.page)       qs.set("page", params.page);
   if (params.limit)      qs.set("limit", params.limit);
   if (params.boutique_id) qs.set("boutique_id", params.boutique_id);
-
+  if (params.search)    qs.set("search", params.search);
   const query = qs.toString() ? `?${qs}` : "";
   return apiFetch(`${API_URL}${query}`);
 }
