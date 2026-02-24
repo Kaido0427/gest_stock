@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Plus, Edit3, Trash2, Package, Eye, Store,
   Search, X, ArrowUpDown, Boxes, TrendingDown,
@@ -49,7 +49,6 @@ function StatCard({ label, value, icon: Icon, gradient, delay }) {
 }
 
 // ─── Product Row (desktop) ────────────────────────────────────────────────────
-// ✅ FIX #8 : onDelete est passé en prop depuis le parent (plus de useDeleteProduit() par ligne)
 function ProductRow({ product, onEdit, onDelete, onStock, onView, index, isDeleting }) {
   const { label, color } = stockStatus(product.stock);
 
@@ -243,17 +242,22 @@ const ProductsPage = () => {
   const [sortBy, setSortBy] = useState("name");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
 
-  // ✅ FIX : Filtre boutique passé à l'API → moins de données transférées
+  // ✅ RÉINITIALISER LA PAGE À 1 QUAND LA RECHERCHE CHANGE
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, selectedBoutique]);
+
+  // ✅ APPEL API AVEC LE TERME DE RECHERCHE (supposé supporté par le hook)
   const { data, isLoading, isError, refetch } = useProduits({
     page,
     limit: 50,
     boutique_id: selectedBoutique || undefined,
+    search: searchTerm,   // ← maintenant la recherche est faite côté serveur
   });
 
   const products = data?.produits ?? [];
   const pagination = data?.pagination ?? null;
 
-  // ✅ FIX #8 : UN SEUL useDeleteProduit dans le parent, pas dans chaque ligne
   const deleteMutation = useDeleteProduit();
   const [deletingId, setDeletingId] = useState(null);
 
@@ -264,7 +268,7 @@ const ProductsPage = () => {
       if (res.error) throw new Error(res.error);
       return Array.isArray(res) ? res : res.boutiques ?? [];
     },
-    staleTime: 5 * 60 * 1000, // boutiques changent rarement
+    staleTime: 5 * 60 * 1000,
   });
 
   const [isProductModalOpen, setProductModalOpen] = useState(false);
@@ -272,7 +276,6 @@ const ProductsPage = () => {
   const [isDetailModalOpen, setDetailModalOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState(null);
 
-  // ✅ FIX : useCallback pour éviter les re-renders des rows
   const handleEdit = useCallback((p) => { setActiveProduct(p); setProductModalOpen(true); }, []);
   const handleAdd = useCallback(() => { setActiveProduct(null); setProductModalOpen(true); }, []);
   const handleStock = useCallback((p) => { setActiveProduct(p); setApproModalOpen(true); }, []);
@@ -284,34 +287,22 @@ const ProductsPage = () => {
     deleteMutation.mutate(id, { onSettled: () => setDeletingId(null) });
   }, [deleteMutation]);
 
-  // ✅ Filtre & tri côté client uniquement pour la recherche texte
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm) return [...products].sort((a, b) => {
+  // ✅ TRI CÔTÉ CLIENT (le serveur ne trie pas encore, on le fait ici)
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
       if (sortBy === "stock") return (a.stock || 0) - (b.stock || 0);
       if (sortBy === "price") return (a.basePrice || 0) - (b.basePrice || 0);
       return a.name.localeCompare(b.name, "fr");
     });
+  }, [products, sortBy]);
 
-    const q = searchTerm.toLowerCase();
-    return products
-      .filter((p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description || "").toLowerCase().includes(q) ||
-        (p.category || "").toLowerCase().includes(q)
-      )
-      .sort((a, b) => {
-        if (sortBy === "stock") return (a.stock || 0) - (b.stock || 0);
-        if (sortBy === "price") return (a.basePrice || 0) - (b.basePrice || 0);
-        return a.name.localeCompare(b.name, "fr");
-      });
-  }, [products, searchTerm, sortBy]);
-
+  // ✅ STATS (calculées sur la page courante, approximation)
   const stats = useMemo(() => ({
-    total: filteredProducts.length,
-    stockTotal: filteredProducts.reduce((s, p) => s + (p.stock || 0), 0),
-    lowStock: filteredProducts.filter((p) => p.stock > 0 && p.stock < 10).length,
-    outOfStock: filteredProducts.filter((p) => p.stock === 0).length,
-  }), [filteredProducts]);
+    total: pagination?.total ?? products.length,
+    stockTotal: products.reduce((s, p) => s + (p.stock || 0), 0),
+    lowStock: products.filter((p) => p.stock > 0 && p.stock < 10).length,
+    outOfStock: products.filter((p) => p.stock === 0).length,
+  }), [products, pagination?.total]);
 
   const hasFilters = searchTerm || selectedBoutique;
   const clearFilters = useCallback(() => { setSearchTerm(""); setSelectedBoutique(""); setPage(1); }, []);
@@ -387,8 +378,8 @@ const ProductsPage = () => {
               <button
                 onClick={() => setShowFilterPanel(!showFilterPanel)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFilterPanel || selectedBoutique
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
                   }`}>
                 <SlidersHorizontal className="w-4 h-4" />
                 <span className="hidden sm:inline">Filtres</span>
@@ -471,7 +462,7 @@ const ProductsPage = () => {
           )}
 
           {/* ── EMPTY STATE ── */}
-          {!isLoading && !isError && filteredProducts.length === 0 && (
+          {!isLoading && !isError && sortedProducts.length === 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -497,12 +488,12 @@ const ProductsPage = () => {
           )}
 
           {/* ── PRODUCT LIST ── */}
-          {!isLoading && !isError && filteredProducts.length > 0 && (
+          {!isLoading && !isError && sortedProducts.length > 0 && (
             <>
               {/* Mobile cards */}
               <div className="lg:hidden space-y-3">
                 <AnimatePresence mode="popLayout">
-                  {filteredProducts.map((product, index) => (
+                  {sortedProducts.map((product, index) => (
                     <ProductCard
                       key={product._id}
                       product={product}
@@ -529,7 +520,7 @@ const ProductsPage = () => {
                   </thead>
                   <tbody>
                     <AnimatePresence mode="popLayout">
-                      {filteredProducts.map((product, index) => (
+                      {sortedProducts.map((product, index) => (
                         <ProductRow
                           key={product._id}
                           product={product}
