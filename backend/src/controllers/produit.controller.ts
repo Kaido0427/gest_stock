@@ -120,21 +120,25 @@ export const createProduit = async (c: Context) => {
 // ─── Voir tous les produits ──────────────────────────────────────────────────
 export const getAllProduits = async (c: Context) => {
     try {
-        // ✅ FIX #3 : .lean() → retourne des objets JS purs, ~30-40% plus rapide
-        // ✅ FIX #4 : Pagination pour éviter de charger 10 000 produits d'un coup
-        const { page = "1", limit = "50", boutique_id } = c.req.query();
+        // ✅ Ajout du paramètre search
+        const { page = "1", limit = "50", boutique_id, search } = c.req.query();
         const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(200, Math.max(1, parseInt(limit))); // max 200 par page
         const skip = (pageNum - 1) * limitNum;
 
         const filter: any = {};
         if (boutique_id) filter.boutique_id = boutique_id;
+        
+        // ✅ Si search est fourni, on ajoute une recherche insensible à la casse sur le nom
+        if (search) {
+            filter.name = { $regex: search, $options: 'i' };
+        }
 
-        // ✅ Lancer count et find en parallèle → gain de temps
+        // Lancer count et find en parallèle
         const [produits, total] = await Promise.all([
             Produit.find(filter)
                 .populate("boutique_id", "name address")
-                .lean()           // ← clé de la perf
+                .lean()
                 .skip(skip)
                 .limit(limitNum)
                 .sort({ name: 1 }),
@@ -155,7 +159,6 @@ export const getAllProduits = async (c: Context) => {
         return c.json({ error: (error as Error).message }, 500);
     }
 };
-
 // ─── Voir tous les produits d'une boutique ───────────────────────────────────
 export const getProduitsByBoutique = async (c: Context) => {
     try {
