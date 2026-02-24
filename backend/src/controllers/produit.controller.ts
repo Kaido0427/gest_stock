@@ -120,7 +120,7 @@ export const createProduit = async (c: Context) => {
 // ─── Voir tous les produits ──────────────────────────────────────────────────
 export const getAllProduits = async (c: Context) => {
     try {
-        // ✅ Ajout du paramètre search
+        // ✅ Récupération de tous les paramètres, y compris search
         const { page = "1", limit = "50", boutique_id, search } = c.req.query();
         const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(200, Math.max(1, parseInt(limit))); // max 200 par page
@@ -129,9 +129,9 @@ export const getAllProduits = async (c: Context) => {
         const filter: any = {};
         if (boutique_id) filter.boutique_id = boutique_id;
         
-        // ✅ Si search est fourni, on ajoute une recherche insensible à la casse sur le nom
-        if (search) {
-            filter.name = { $regex: search, $options: 'i' };
+        // ✅ AJOUT : Si un terme de recherche est fourni, on filtre sur le nom
+        if (search && search.trim() !== "") {
+            filter.name = { $regex: search, $options: "i" }; // insensible à la casse
         }
 
         // Lancer count et find en parallèle
