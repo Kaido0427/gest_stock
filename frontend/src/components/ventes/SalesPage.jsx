@@ -1,20 +1,17 @@
 // pages/SalesPage.jsx
-import React, { useState, useEffect,useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Search, Package, ShoppingCart,
   Receipt, Plus, Minus, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { vendreProduit } from "../../services/sale";
-import { getCurrentUser } from "../../services/auth";
+import { useCurrentUser } from "../../hooks/useAuth";
 import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
 
-// --- fin helpers ---
-
-// --- Ajoute juste après les imports ---
+// --- Constantes et helpers ---
 const UNIT_MAPS = {
-  // valeurs = litres par unité / kilogrammes par unité (pour conversion via "toUnit")
   liquids: { kl: 1000, l: 1, cl: 0.01, ml: 0.001 },
   weights: { t: 1000, kg: 1, g: 0.001, mg: 0.000001 },
 };
@@ -25,8 +22,6 @@ const convertUnit = (quantity, fromUnit, toUnit) => {
   if (!fromUnit || !toUnit) return quantity;
   const f = normalize(fromUnit);
   const t = normalize(toUnit);
-
-  // same unit
   if (f === t) return quantity;
 
   const liq = UNIT_MAPS.liquids;
@@ -41,21 +36,22 @@ const convertUnit = (quantity, fromUnit, toUnit) => {
     const inKg = quantity * w[f];
     return inKg / w[t];
   }
-
-  // fallback: can't convert between different families
   return quantity;
 };
-
 
 const isMobile = () => {
   if (typeof window === "undefined") return false;
   return window.innerWidth <= 768;
 };
 
-const SalesPage = ({ products, onRefreshProducts }) => {
+// --- Composant principal ---
+// ✅ Renommage du paramètre pour éviter le conflit
+const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
+  // ✅ Normalisation : si c'est un objet avec une clé "produits", on prend ce tableau
+  const products = Array.isArray(productsProp) ? productsProp : (productsProp?.produits ?? []);
+
   const cartRef = useRef(null);
   // États
-  const [user, setUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tous");
   const [cart, setCart] = useState([]);
@@ -65,35 +61,32 @@ const SalesPage = ({ products, onRefreshProducts }) => {
   const [customPrice, setCustomPrice] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Charger l'utilisateur
-  useEffect(() => {
-    const loadUser = async () => {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    };
-    loadUser();
-  }, []);
+  // Hook utilisateur
+  const { data: user, isLoading: userLoading } = useCurrentUser();
+
+  // Debug (à supprimer plus tard)
+  console.log("SalesPage - products (normalisé):", products);
+  console.log("SalesPage - user:", user);
 
   // Filtrer les produits selon le rôle de l'utilisateur
   const getFilteredProductsByUser = () => {
+    if (!Array.isArray(products)) return [];
     if (!user) return products;
 
     if (user.role === "employe" && user.boutique) {
-      // Employé : uniquement les produits de sa boutique
-      return products.filter(p => 
-        p.boutique_id?._id === user.boutique.id || 
-        p.boutique_id === user.boutique.id
+      const boutiqueId = user.boutique._id || user.boutique.id;
+      return products.filter(p =>
+        p.boutique_id?._id === boutiqueId ||
+        p.boutique_id === boutiqueId
       );
     }
-
-    // Admin : tous les produits
     return products;
   };
 
-  // Produits filtrés par utilisateur d'abord
+  // Produits filtrés par utilisateur
   const userProducts = getFilteredProductsByUser();
 
-  // Catégories basées sur les produits de l'utilisateur
+  // Catégories
   const categories = ["Tous", ...new Set(userProducts.map(p => p.category).filter(Boolean))];
 
   // Produits filtrés par recherche et catégorie
@@ -104,7 +97,7 @@ const SalesPage = ({ products, onRefreshProducts }) => {
     return matchesSearch && matchesCategory && hasStock;
   });
 
-  // Unités disponibles selon le produit
+  // Unités disponibles
   const getAvailableUnits = (baseUnit) => {
     const liquidUnits = ["L", "cL", "mL", "kL"];
     const weightUnits = ["kg", "g", "mg", "t"];
@@ -119,20 +112,15 @@ const SalesPage = ({ products, onRefreshProducts }) => {
 
   // Calculer le prix estimé
   const calculateEstimatedPrice = () => {
-  if (!selectedProduct || !quantity || quantity <= 0) return 0;
+    if (!selectedProduct || !quantity || quantity <= 0) return 0;
+    if (customPrice && parseFloat(customPrice) > 0) {
+      return parseFloat(customPrice);
+    }
 
-  // si prix personnalisé total (frontend attend un prix TOTAL)
-  if (customPrice && parseFloat(customPrice) > 0) {
-    return parseFloat(customPrice);
-  }
-
-  const unitToUse = selectedUnit || selectedProduct.unit;
-  // Convertir la quantité vendue en unité de base du produit (ex: en kg ou en L)
-  const qtyInBase = convertUnit(parseFloat(quantity), unitToUse, selectedProduct.unit);
-  // prix total = basePrice (par unité de base) * qtyInBase
-  return (parseFloat(selectedProduct.basePrice) || 0) * qtyInBase;
-};
-
+    const unitToUse = selectedUnit || selectedProduct.unit;
+    const qtyInBase = convertUnit(parseFloat(quantity), unitToUse, selectedProduct.unit);
+    return (parseFloat(selectedProduct.basePrice) || 0) * qtyInBase;
+  };
 
   // Ajouter au panier
   const handleAddToCart = () => {
@@ -141,7 +129,6 @@ const SalesPage = ({ products, onRefreshProducts }) => {
       return;
     }
 
-    // Vérifier si la conversion est possible
     const canConvert = ["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit);
     const unitToSell = canConvert ? (selectedUnit || selectedProduct.unit) : selectedProduct.unit;
 
@@ -152,18 +139,18 @@ const SalesPage = ({ products, onRefreshProducts }) => {
 
     const estimatedPrice = calculateEstimatedPrice();
 
-  const cartItem = {
-  id: `${selectedProduct._id}-${Date.now()}`,
-  productId: selectedProduct._id,
-  productName: selectedProduct.name,
-  quantity: parseFloat(quantity),
-  unit: unitToSell,
-  baseUnit: selectedProduct.unit,
-  basePrice: selectedProduct.basePrice,
-  estimatedTotal: estimatedPrice,
-  customPrice: customPrice ? parseFloat(customPrice) : undefined, // undefined si pas de prix perso
-  maxStock: selectedProduct.stock
-};
+    const cartItem = {
+      id: `${selectedProduct._id}-${Date.now()}`,
+      productId: selectedProduct._id,
+      productName: selectedProduct.name,
+      quantity: parseFloat(quantity),
+      unit: unitToSell,
+      baseUnit: selectedProduct.unit,
+      basePrice: selectedProduct.basePrice,
+      estimatedTotal: estimatedPrice,
+      customPrice: customPrice ? parseFloat(customPrice) : undefined,
+      maxStock: selectedProduct.stock
+    };
 
     setCart([...cart, cartItem]);
 
@@ -174,24 +161,26 @@ const SalesPage = ({ products, onRefreshProducts }) => {
   };
 
   // Mettre à jour la quantité d'un item
-const handleUpdateQuantity = (itemId, newQuantity) => {
-  if (newQuantity < 0.01) return;
+  const handleUpdateQuantity = (itemId, newQuantity) => {
+    if (newQuantity < 0.01) return;
 
-  setCart(cart.map(item => {
-    if (item.id === itemId) {
-      const unitToUse = item.unit || item.baseUnit;
-      // convertir la nouvelle quantité en unité de base
-      const qtyInBase = convertUnit(parseFloat(newQuantity), unitToUse, item.baseUnit);
-      const newTotal = item.customPrice !== undefined && item.customPrice !== null
-        ? item.customPrice  // customPrice est traité comme TOTAL
-        : (parseFloat(item.basePrice) || 0) * qtyInBase;
+    setCart(cart.map(item => {
+      if (item.id === itemId) {
+        const unitToUse = item.unit || item.baseUnit;
+        const qtyInBase = convertUnit(parseFloat(newQuantity), unitToUse, item.baseUnit);
+        const newTotal = item.customPrice !== undefined && item.customPrice !== null
+          ? item.customPrice
+          : (parseFloat(item.basePrice) || 0) * qtyInBase;
 
-      return { ...item, quantity: Math.round(newQuantity*100)/100, estimatedTotal: Math.round(newTotal*100)/100 };
-    }
-    return item;
-  }));
-};
-
+        return {
+          ...item,
+          quantity: Math.round(newQuantity * 100) / 100,
+          estimatedTotal: Math.round(newTotal * 100) / 100
+        };
+      }
+      return item;
+    }));
+  };
 
   // Retirer un item du panier
   const handleRemoveFromCart = (itemId) => {
@@ -259,6 +248,15 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
   const subtotal = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
   const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Affichage pendant le chargement de l'utilisateur
+  if (userLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -293,11 +291,10 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${
-                      selectedCategory === category
+                    className={`px-4 py-2 whitespace-nowrap rounded-lg transition-colors ${selectedCategory === category
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {category}
                   </button>
@@ -316,6 +313,11 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
               <div className="text-center py-12 text-gray-400">
                 <Package className="w-16 h-16 mx-auto mb-3 opacity-50" />
                 <p>Aucun produit correspondant</p>
+                {products.length === 0 && (
+                  <p className="text-sm mt-2 text-gray-500">
+                    Aucun produit disponible. Vérifiez que les produits sont chargés.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -326,30 +328,25 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
                       product={product}
                       isSelected={selectedProduct?._id === product._id}
                       onSelect={() => {
-  setSelectedProduct(product);
-  setQuantity(1);
-  setSelectedUnit(product.unit);
-  setCustomPrice("");
+                        setSelectedProduct(product);
+                        setQuantity(1);
+                        setSelectedUnit(product.unit);
+                        setCustomPrice("");
 
-  if (isMobile() && cartRef.current) {
-    requestAnimationFrame(() => {
-      cartRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-
-      cartRef.current.focus({ preventScroll: true });
-
-      // 🔵 Feedback visuel (flash du panier)
-      cartRef.current.classList.add("ring-2", "ring-blue-400");
-
-      setTimeout(() => {
-        cartRef.current.classList.remove("ring-2", "ring-blue-400");
-      }, 600);
-    });
-  }
-}}
-
+                        if (isMobile() && cartRef.current) {
+                          requestAnimationFrame(() => {
+                            cartRef.current.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start"
+                            });
+                            cartRef.current.focus({ preventScroll: true });
+                            cartRef.current.classList.add("ring-2", "ring-blue-400");
+                            setTimeout(() => {
+                              cartRef.current.classList.remove("ring-2", "ring-blue-400");
+                            }, 600);
+                          });
+                        }
+                      }}
                       showBoutique={user?.role === "admin"}
                     />
                   ))}
@@ -363,12 +360,11 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
         <div className="space-y-6">
           {/* PANIER */}
           <div
-  ref={cartRef}
-  id="cart-anchor"
-  tabIndex={-1}
-  className="bg-white p-6 rounded-xl shadow"
->
-
+            ref={cartRef}
+            id="cart-anchor"
+            tabIndex={-1}
+            className="bg-white p-6 rounded-xl shadow"
+          >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-5 h-5" />
@@ -509,44 +505,42 @@ const handleUpdateQuantity = (itemId, newQuantity) => {
                 </div>
 
                 {/* Quantité */}
-<div>
-  <label className="block text-sm font-medium text-gray-700 mb-2">
-    Quantité
-  </label>
-  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-    <button
-      onClick={() => setQuantity(Math.max(0.01, Math.round((quantity - 0.01) * 100) / 100))}
-      disabled={quantity <= 0.01}
-      className={`p-2 rounded-lg ${
-        quantity <= 0.01
-          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-      }`}
-    >
-      <Minus className="w-4 h-4" />
-    </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantité
+                  </label>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <button
+                      onClick={() => setQuantity(Math.max(0.01, Math.round((quantity - 0.01) * 100) / 100))}
+                      disabled={quantity <= 0.01}
+                      className={`p-2 rounded-lg ${quantity <= 0.01
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
 
-    <input
-      type="number"
-      value={quantity}
-      onChange={(e) => {
-        const v = parseFloat(e.target.value);
-        setQuantity(Math.max(0.01, isNaN(v) ? 0.01 : Math.round(v * 100) / 100));
-      }}
-      className="w-20 text-center text-2xl font-bold text-gray-800 bg-transparent"
-      step="0.01"
-      min="0.01"
-    />
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setQuantity(Math.max(0.01, isNaN(v) ? 0.01 : Math.round(v * 100) / 100));
+                      }}
+                      className="w-20 text-center text-2xl font-bold text-gray-800 bg-transparent"
+                      step="0.01"
+                      min="0.01"
+                    />
 
-    <button
-      onClick={() => setQuantity(Math.round((quantity + 0.01) * 100) / 100)}
-      className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-    >
-      <Plus className="w-4 h-4" />
-    </button>
-  </div>
-</div>
-
+                    <button
+                      onClick={() => setQuantity(Math.round((quantity + 0.01) * 100) / 100)}
+                      className="p-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
                 {/* Prix personnalisé */}
                 <div>
