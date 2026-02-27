@@ -1,21 +1,22 @@
 // pages/SalesPage.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import {
-  Search, Package, ShoppingCart, Receipt, Plus, Minus, X,
-  Store, TrendingUp, Filter, ChevronDown, ChevronUp,RefreshCw
+  Search, Package, ShoppingCart, Receipt, Plus, Minus, X, RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { vendreProduit } from "../../services/sale";
 import { useCurrentUser } from "../../hooks/useAuth";
+import { useProduits } from "../../hooks/useProducts";
+import { useValiderVente } from "../../hooks/useSales";
 import ProductSelector from "../../components/ventes/ProductSelector";
 import CartItem from "../../components/ventes/CartItem";
 
-// --- Helpers de conversion (inchangés) ---
+// ─── Helpers de conversion ────────────────────────────────────────────────────
 const UNIT_MAPS = {
   liquids: { kl: 1000, l: 1, cl: 0.01, ml: 0.001 },
   weights: { t: 1000, kg: 1, g: 0.001, mg: 0.000001 },
 };
 const normalize = (u) => (typeof u === "string" ? u.trim().toLowerCase() : u);
+
 const convertUnit = (quantity, fromUnit, toUnit) => {
   if (!fromUnit || !toUnit) return quantity;
   const f = normalize(fromUnit);
@@ -23,23 +24,47 @@ const convertUnit = (quantity, fromUnit, toUnit) => {
   if (f === t) return quantity;
   const liq = UNIT_MAPS.liquids;
   const w = UNIT_MAPS.weights;
-  if (liq[f] !== undefined && liq[t] !== undefined) {
-    const inLiters = quantity * liq[f];
-    return inLiters / liq[t];
-  }
-  if (w[f] !== undefined && w[t] !== undefined) {
-    const inKg = quantity * w[f];
-    return inKg / w[t];
-  }
+  if (liq[f] !== undefined && liq[t] !== undefined) return (quantity * liq[f]) / liq[t];
+  if (w[f] !== undefined && w[t] !== undefined) return (quantity * w[f]) / w[t];
   return quantity;
 };
 
-const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
-  // Normalisation des produits
-  const products = Array.isArray(productsProp) ? productsProp : (productsProp?.produits ?? []);
+const CONVERTIBLE_UNITS = ["L", "cL", "mL", "kL", "kg", "g", "mg", "t"];
 
+const getAvailableUnits = (baseUnit) => {
+  if (["L", "cL", "mL", "kL"].includes(baseUnit)) return ["L", "cL", "mL", "kL"];
+  if (["kg", "g", "mg", "t"].includes(baseUnit)) return ["kg", "g", "mg", "t"];
+  return [baseUnit];
+};
+
+// ─── SalesPage ────────────────────────────────────────────────────────────────
+const SalesPage = () => {
   const cartRef = useRef(null);
-  // États
+  const { data: user, isLoading: userLoading } = useCurrentUser();
+
+  // ✅ Récupère TOUS les produits sans limite (limit=9999)
+  // Le hook useProduits passe les params à l'API → plus de troncature silencieuse
+  const boutiqueId =
+    user?.role === "employe" && user?.boutique
+      ? user.boutique._id || user.boutique.id
+      : undefined;
+
+  const {
+    data: prodData,
+    isLoading: productsLoading,
+    refetch: refetchProducts,
+  } = useProduits(
+    boutiqueId
+      ? { boutique_id: boutiqueId, limit: 9999 }
+      : { limit: 9999 }
+  );
+
+  const allProducts = prodData?.produits ?? [];
+
+  // Mutation de vente
+  const { mutateAsync: valider, isPending: loading } = useValiderVente();
+
+  // ─── États UI ──────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Tous");
   const [cart, setCart] = useState([]);
@@ -47,47 +72,25 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [customPrice, setCustomPrice] = useState("");
-  const [loading, setLoading] = useState(false);
-  // Pour mobile : afficher/cacher la configuration produit
   const [showConfig, setShowConfig] = useState(false);
 
-  const { data: user, isLoading: userLoading } = useCurrentUser();
+  // ─── Dérivés ───────────────────────────────────────────────────────────────
+  const categories = [
+    "Tous",
+    ...new Set(allProducts.map((p) => p.category).filter(Boolean)),
+  ];
 
-  // Filtrage par boutique selon rôle
-  const getFilteredProductsByUser = () => {
-    if (!Array.isArray(products)) return [];
-    if (!user) return products;
-    if (user.role === "employe" && user.boutique) {
-      const boutiqueId = user.boutique._id || user.boutique.id;
-      return products.filter(p =>
-        p.boutique_id?._id === boutiqueId || p.boutique_id === boutiqueId
-      );
-    }
-    return products;
-  };
-  const userProducts = getFilteredProductsByUser();
-
-  // Catégories uniques
-  const categories = ["Tous", ...new Set(userProducts.map(p => p.category).filter(Boolean))];
-
-  // Produits filtrés (recherche + catégorie + stock > 0)
-  const filteredProducts = userProducts.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "Tous" || product.category === selectedCategory;
-    const hasStock = product.stock > 0;
-    return matchesSearch && matchesCategory && hasStock;
+  const filteredProducts = allProducts.filter((p) => {
+    const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCategory = selectedCategory === "Tous" || p.category === selectedCategory;
+    const hasStock = p.stock > 0;
+    return matchSearch && matchCategory && hasStock;
   });
 
-  // Unités disponibles
-  const getAvailableUnits = (baseUnit) => {
-    const liquidUnits = ["L", "cL", "mL", "kL"];
-    const weightUnits = ["kg", "g", "mg", "t"];
-    if (liquidUnits.includes(baseUnit)) return liquidUnits;
-    if (weightUnits.includes(baseUnit)) return weightUnits;
-    return [baseUnit];
-  };
+  const subtotal = cart.reduce((s, i) => s + i.estimatedTotal, 0);
+  const itemsCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  // Calcul prix estimé
+  // ─── Prix estimé ──────────────────────────────────────────────────────────
   const calculateEstimatedPrice = () => {
     if (!selectedProduct || !quantity || quantity <= 0) return 0;
     if (customPrice && parseFloat(customPrice) > 0) return parseFloat(customPrice);
@@ -96,19 +99,12 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
     return (parseFloat(selectedProduct.basePrice) || 0) * qtyInBase;
   };
 
-  // Ajout au panier
+  // ─── Ajouter au panier ────────────────────────────────────────────────────
   const handleAddToCart = () => {
-    if (!selectedProduct || quantity <= 0) {
-      alert("Veuillez sélectionner un produit et une quantité");
-      return;
-    }
-    const canConvert = ["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit);
+    if (!selectedProduct || quantity <= 0) return;
+    const canConvert = CONVERTIBLE_UNITS.includes(selectedProduct.unit);
     const unitToSell = canConvert ? (selectedUnit || selectedProduct.unit) : selectedProduct.unit;
-    if (!canConvert && selectedUnit !== selectedProduct.unit) {
-      alert(`Ce produit ne peut être vendu que en ${selectedProduct.unit}`);
-      return;
-    }
-    const estimatedPrice = calculateEstimatedPrice();
+
     const cartItem = {
       id: `${selectedProduct._id}-${Date.now()}`,
       productId: selectedProduct._id,
@@ -117,96 +113,72 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
       unit: unitToSell,
       baseUnit: selectedProduct.unit,
       basePrice: selectedProduct.basePrice,
-      estimatedTotal: estimatedPrice,
+      estimatedTotal: calculateEstimatedPrice(),
       customPrice: customPrice ? parseFloat(customPrice) : undefined,
-      maxStock: selectedProduct.stock
+      maxStock: selectedProduct.stock,
     };
-    setCart([...cart, cartItem]);
-    // Réinitialiser
+    setCart((prev) => [...prev, cartItem]);
     setQuantity(1);
     setCustomPrice("");
     setSelectedUnit(selectedProduct.unit);
-    // Sur mobile, replier la config après ajout
     if (window.innerWidth < 768) setShowConfig(false);
   };
 
-  // Mise à jour quantité dans panier
-  const handleUpdateQuantity = (itemId, newQuantity) => {
-    if (newQuantity < 0.01) return;
-    setCart(cart.map(item => {
-      if (item.id === itemId) {
+  // ─── Mise à jour quantité ─────────────────────────────────────────────────
+  const handleUpdateQuantity = (itemId, newQty) => {
+    if (newQty < 0.01) return;
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
         const unitToUse = item.unit || item.baseUnit;
-        const qtyInBase = convertUnit(parseFloat(newQuantity), unitToUse, item.baseUnit);
-        const newTotal = item.customPrice !== undefined && item.customPrice !== null
-          ? item.customPrice
-          : (parseFloat(item.basePrice) || 0) * qtyInBase;
+        const qtyInBase = convertUnit(parseFloat(newQty), unitToUse, item.baseUnit);
+        const newTotal =
+          item.customPrice !== undefined && item.customPrice !== null
+            ? item.customPrice
+            : (parseFloat(item.basePrice) || 0) * qtyInBase;
         return {
           ...item,
-          quantity: Math.round(newQuantity * 100) / 100,
-          estimatedTotal: Math.round(newTotal * 100) / 100
+          quantity: Math.round(newQty * 100) / 100,
+          estimatedTotal: Math.round(newTotal * 100) / 100,
         };
-      }
-      return item;
-    }));
+      })
+    );
   };
 
-  // Supprimer item
-  const handleRemoveFromCart = (itemId) => {
-    setCart(cart.filter(item => item.id !== itemId));
-  };
+  const handleRemoveFromCart = (itemId) =>
+    setCart((prev) => prev.filter((i) => i.id !== itemId));
 
-  // Vider panier
   const handleClearCart = () => {
     if (cart.length === 0) return;
-    if (confirm("Voulez-vous vraiment vider le panier ?")) {
-      setCart([]);
-    }
+    if (confirm("Voulez-vous vraiment vider le panier ?")) setCart([]);
   };
 
-  // Validation vente
+  // ─── Validation vente ─────────────────────────────────────────────────────
   const handleCheckout = async () => {
-    if (cart.length === 0) {
-      alert("Le panier est vide");
-      return;
-    }
-    setLoading(true);
+    if (cart.length === 0) return;
     try {
-      for (const item of cart) {
-        const result = await vendreProduit(
-          item.productId,
-          parseFloat(item.quantity),
-          item.unit,
-          item.customPrice ? parseFloat(item.customPrice) : null
-        );
-        if (result && result.error) {
-          throw new Error(result.error || "Erreur inconnue serveur");
-        }
-      }
-      const totalAmount = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
-      const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-      alert(
-        `✅ Vente validée avec succès !\n\n` +
-        `Articles vendus: ${itemsCount}\n` +
-        `Montant total: ${totalAmount.toLocaleString()} FCFA\n\n` +
-        `Les stocks ont été mis à jour.`
-      );
+      // On envoie UN seul appel groupé via validerVente (POST /ventes)
+      await valider({
+        items: cart.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          customPrice: item.customPrice,
+        })),
+      });
       setCart([]);
-      if (onRefreshProducts) await onRefreshProducts();
-    } catch (error) {
-      console.error("[Checkout] erreur:", error);
-      alert("Erreur lors de la validation de la vente: " + (error?.message || JSON.stringify(error)));
-    } finally {
-      setLoading(false);
+      // Les produits sont invalidés automatiquement dans useValiderVente
+    } catch {
+      // l'erreur est déjà gérée par onError du hook (toast)
     }
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.estimatedTotal, 0);
-  const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  if (userLoading) {
+  // ─── Render ───────────────────────────────────────────────────────────────
+  if (userLoading || productsLoading) {
     return (
       <div className="min-h-screen bg-[#f5f6fa] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900" />
       </div>
     );
   }
@@ -215,7 +187,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
     <div className="min-h-screen bg-[#f5f6fa] p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-5">
 
-        {/* ── HEADER (comme dans Rapports) ── */}
+        {/* HEADER */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
@@ -223,26 +195,28 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
             </h1>
             <p className="text-sm text-slate-500 mt-1 flex items-center gap-2">
               <ShoppingCart className="w-4 h-4" />
-              {itemsCount} article{itemsCount > 1 ? 's' : ''} • Total:{' '}
-              <span className="font-semibold text-indigo-600">{subtotal.toLocaleString()} FCFA</span>
+              {itemsCount} article{itemsCount > 1 ? "s" : ""} • Total :{" "}
+              <span className="font-semibold text-indigo-600">
+                {subtotal.toLocaleString()} FCFA
+              </span>
             </p>
           </div>
-          {/* Bouton rafraîchir (si besoin) */}
           <button
-            onClick={onRefreshProducts}
+            onClick={() => refetchProducts()}
             className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-700 shadow-sm transition-colors self-start sm:self-auto"
+            title="Rafraîchir les produits"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
 
-        {/* ── ZONE PRINCIPALE (2 colonnes sur desktop, 1 sur mobile) ── */}
+        {/* GRILLE */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* COLONNE GAUCHE (produits) */}
+          {/* ── GAUCHE : liste produits ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Barre de recherche et catégories */}
+            {/* Recherche + catégories */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative">
@@ -255,32 +229,32 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-
-                {/* Catégories (scroll horizontal sur mobile) */}
                 <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                  {categories.map(category => (
+                  {categories.map((cat) => (
                     <button
-                      key={category}
-                      onClick={() => setSelectedCategory(category)}
-                      className={`px-4 py-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all ${selectedCategory === category
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-4 py-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all ${selectedCategory === cat
+                          ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                         }`}
                     >
-                      {category}
+                      {cat}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Grille de produits */}
+            {/* Grille produits */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-5">
                 <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
                   <Package className="w-4 h-4 text-indigo-600" />
                 </div>
-                <h2 className="font-black text-slate-900 text-sm">Produits disponibles ({filteredProducts.length})</h2>
+                <h2 className="font-black text-slate-900 text-sm">
+                  Produits disponibles ({filteredProducts.length})
+                </h2>
               </div>
 
               {filteredProducts.length === 0 ? (
@@ -302,8 +276,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                           setQuantity(1);
                           setSelectedUnit(product.unit);
                           setCustomPrice("");
-                          setShowConfig(true); // sur mobile, déplier la config
-                          // Scroll vers le panier sur mobile
+                          setShowConfig(true);
                           if (window.innerWidth < 768 && cartRef.current) {
                             cartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
                           }
@@ -317,13 +290,11 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
             </div>
           </div>
 
-          {/* COLONNE DROITE (panier + config) */}
+          {/* ── DROITE : panier + config ── */}
           <div className="space-y-5">
+
             {/* Panier */}
-            <div
-              ref={cartRef}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5"
-            >
+            <div ref={cartRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center">
@@ -336,8 +307,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                     onClick={handleClearCart}
                     className="text-xs text-red-600 hover:text-red-800 font-medium flex items-center gap-1 bg-red-50 px-2 py-1 rounded-full"
                   >
-                    <X className="w-3 h-3" />
-                    Vider
+                    <X className="w-3 h-3" /> Vider
                   </button>
                 )}
               </div>
@@ -407,10 +377,9 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
               )}
             </div>
 
-            {/* Configuration du produit sélectionné (accordéon sur mobile) */}
+            {/* Config produit sélectionné */}
             {selectedProduct && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                {/* En-tête cliquable sur mobile pour replier/déplier */}
                 <div
                   className="flex items-center justify-between cursor-pointer lg:cursor-default"
                   onClick={() => window.innerWidth < 768 && setShowConfig(!showConfig)}
@@ -429,7 +398,6 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                   </button>
                 </div>
 
-                {/* Contenu de la config (caché sur mobile si showConfig false) */}
                 <AnimatePresence initial={false}>
                   {(showConfig || window.innerWidth >= 768) && (
                     <motion.div
@@ -440,6 +408,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                       className="overflow-hidden"
                     >
                       <div className="pt-5 space-y-4">
+
                         {/* Stock */}
                         <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
                           <div className="text-xs text-indigo-600 font-medium mb-1">Stock disponible</div>
@@ -447,7 +416,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                             {selectedProduct.stock} {selectedProduct.unit}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
-                            Prix: {selectedProduct.basePrice.toLocaleString()} FCFA / {selectedProduct.unit}
+                            Prix : {selectedProduct.basePrice?.toLocaleString()} FCFA / {selectedProduct.unit}
                           </div>
                         </div>
 
@@ -459,12 +428,12 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                           <select
                             value={selectedUnit}
                             onChange={(e) => setSelectedUnit(e.target.value)}
+                            disabled={!CONVERTIBLE_UNITS.includes(selectedProduct.unit)}
                             className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 text-slate-700 text-sm"
-                            disabled={!["L", "cL", "mL", "kL", "kg", "g", "mg", "t"].includes(selectedProduct.unit)}
                           >
-                            {getAvailableUnits(selectedProduct.unit).map(unit => (
-                              <option key={unit} value={unit}>
-                                {unit} {unit === selectedProduct.unit && "(base)"}
+                            {getAvailableUnits(selectedProduct.unit).map((u) => (
+                              <option key={u} value={u}>
+                                {u} {u === selectedProduct.unit && "(base)"}
                               </option>
                             ))}
                           </select>
@@ -479,7 +448,7 @@ const SalesPage = ({ products: productsProp = [], onRefreshProducts }) => {
                             <button
                               onClick={() => setQuantity(Math.max(0.01, Math.round((quantity - 0.01) * 100) / 100))}
                               disabled={quantity <= 0.01}
-                              className={`w-10 h-10 rounded-lg flex items-center justify-center ${quantity <= 0.01 ? 'text-slate-300' : 'text-slate-600 hover:bg-slate-200'
+                              className={`w-10 h-10 rounded-lg flex items-center justify-center ${quantity <= 0.01 ? "text-slate-300" : "text-slate-600 hover:bg-slate-200"
                                 }`}
                             >
                               <Minus className="w-4 h-4" />
