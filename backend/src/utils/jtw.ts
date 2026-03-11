@@ -1,15 +1,15 @@
-// utils/jwt.ts (renommez le fichier de jtw.ts à jwt.ts)
 import jwt from "jsonwebtoken";
 
-export function generateToken(userId: string) {
-  const secret = process.env.JWT_SECRET;
-  
-  if (!secret || secret === '') {
-    console.error('❌ ERREUR CRITIQUE: JWT_SECRET non défini dans .env');
-    throw new Error('JWT_SECRET manquant. Vérifiez votre fichier .env');
-  }
-  
-  return jwt.sign({ userId }, secret, { // ← Change "id" en "userId"
-    expiresIn: "7d",
-  });
+interface TokenPayload {
+  userId: string;
+  tenantId?: string;
+  role: string;
 }
+
+export const generateToken = (payload: TokenPayload): string => {
+  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: "7d" });
+};
+
+export const verifyToken = (token: string): TokenPayload => {
+  return jwt.verify(token, process.env.JWT_SECRET!) as TokenPayload;
+};

@@ -1,79 +1,40 @@
-// App.jsx - MODIFIÉ
-import React, { useState, useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMe, useLogout } from "./hooks/useAuth";
 import Dashboard from "./pages/Dashboard";
 import LoginPage from "./pages/Login";
-import { getCurrentUser, login, logout } from "./services/auth";
 
-const App = () => {
-  // 🔍 TEST DE LA VARIABLE D'ENVIRONNEMENT
-  console.log('API_URL:', import.meta.env.VITE_API_URL);
-  console.log('Toutes les env:', import.meta.env);
-  
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem("token");
+const AppContent = () => {
+  const { data: user, isLoading } = useMe();
+  const { mutate: logout } = useLogout();
 
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      
-      const currentUser = await getCurrentUser();
-
-      if (currentUser) {
-        setUser(currentUser);
-        setIsAuthenticated(true);
-      } else {
-        localStorage.removeItem("token");
-        setIsAuthenticated(false);
-      }
-
-      setLoading(false);
-    };
-
-    initAuth();
-  }, []);
-
-  const handleLogin = async (email, password) => {
-    const result = await login(email, password);
-
-    if (result.error) {
-      return result;
-    }
-
-    const currentUser = await getCurrentUser();
-    if (currentUser) {
-      setUser(currentUser);
-      setIsAuthenticated(true);
-    }
-
-    return result;
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    setIsAuthenticated(false);
-  };
-
-  if (loading) {
-    return <div className="p-6">Chargement...</div>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500">Chargement...</p>
+      </div>
+    );
   }
 
-  return (
-    <>
-      {isAuthenticated ? (
-        <Dashboard user={user} onLogout={handleLogout} />
-      ) : (
-        <LoginPage onLogin={handleLogin} />
-      )}
-    </>
+  return user ? (
+    <Dashboard user={user} onLogout={logout} />
+  ) : (
+    <LoginPage />
   );
 };
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <AppContent />
+  </QueryClientProvider>
+);
 
 export default App;

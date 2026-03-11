@@ -1,362 +1,228 @@
-// backend/src/controllers/vente.controller.ts
 import type { Context } from "hono";
 import { Vente } from "../models/vente.model.js";
 import { Produit } from "../models/produit.model.js";
-import { Boutique } from "../models/boutique.model.js";
-import type { Types } from "mongoose";
 import mongoose from "mongoose";
+import type { AppEnv } from "../types/app.type.js";
 
-// ✅ Helper function pour les conversions d'unités (même que dans produit.controller)
 const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number => {
-    if (!fromUnit || !toUnit) return quantity;
-    const from = fromUnit.trim().toLowerCase();
-    const to = toUnit.trim().toLowerCase();
-
-    if (from === to) return quantity;
-
-    const liquidToLiter: { [key: string]: number } = {
-        'kl': 1000,
-        'l': 1,
-        'cl': 0.01,
-        'ml': 0.001
-    };
-
-    const weightToKg: { [key: string]: number } = {
-        't': 1000,
-        'kg': 1,
-        'g': 0.001,
-        'mg': 0.000001
-    };
-
-    if (liquidToLiter[from] !== undefined && liquidToLiter[to] !== undefined) {
-        const inLiters = quantity * liquidToLiter[from];
-        return inLiters / liquidToLiter[to];
-    }
-
-    if (weightToKg[from] !== undefined && weightToKg[to] !== undefined) {
-        const inKg = quantity * weightToKg[from];
-        return inKg / weightToKg[to];
-    }
-
+    if (!fromUnit || !toUnit || fromUnit === toUnit) return quantity;
+    const f = fromUnit.trim().toLowerCase();
+    const t = toUnit.trim().toLowerCase();
+    const liq: Record<string, number> = { kl: 1000, l: 1, cl: 0.01, ml: 0.001 };
+    const wgt: Record<string, number> = { t: 1000, kg: 1, g: 0.001, mg: 0.000001 };
+    if (liq[f] !== undefined && liq[t] !== undefined) return (quantity * liq[f]) / liq[t];
+    if (wgt[f] !== undefined && wgt[t] !== undefined) return (quantity * wgt[f]) / wgt[t];
     return quantity;
 };
 
-// ✅ Helper pour calculer le prix
-const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, soldQuantity: number): number => {
-    const unitInBase = convertUnit(1, soldUnit, baseUnit);
-    const pricePerSoldUnit = basePrice * unitInBase;
-    return pricePerSoldUnit * soldQuantity;
+const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, soldQty: number): number => {
+    return basePrice * convertUnit(1, soldUnit, baseUnit) * soldQty;
 };
 
-// ➤ Enregistrer une vente complète (panier avec plusieurs produits)
-export const validerVente = async (c: Context) => {
-    console.group("🛒 [BACKEND] validerVente");
+// ─── Valider une vente (panier) ──────────────────────────────────────────────
+export const validerVente = async (c: Context<AppEnv>) => {
     try {
+        const tenantId = c.get("tenantId");
         const body = await c.req.json();
-        console.log("➡ Requête reçue :", body);
 
-        if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
-            console.warn("❌ Vente vide ou items invalides");
+        if (!body.items || !Array.isArray(body.items) || body.items.length === 0)
             return c.json({ error: "La vente doit contenir au moins un article" }, 400);
-        }
 
         const ventesItems = [];
-        const errors = [];
+        const errors: string[] = [];
         let totalAmount = 0;
-        let boutique_id: Types.ObjectId | null = null;
+        let boutique_id: mongoose.Types.ObjectId | null = null;
 
         for (const item of body.items) {
-            console.log("🔹 Traitement item :", item);
-
-            try {
-                // Validation de base
-                if (!item.productId || !item.quantity || item.quantity <= 0) {
-                    errors.push(`Item incomplet: ${item.productName || 'Inconnu'}`);
-                    console.warn("❌ Item incomplet :", item);
-                    continue;
-                }
-
-                const produit = await Produit.findById(item.productId);
-                if (!produit) {
-                    errors.push(`Produit introuvable: ${item.productName || item.productId}`);
-                    console.warn("❌ Produit introuvable :", item.productId);
-                    continue;
-                }
-
-                // Capturer le boutique_id du premier produit
-                if (!boutique_id) {
-                    boutique_id = produit.boutique_id;
-                }
-
-                // ✅ Déterminer l'unité de vente
-                const unitSold = item.unit || produit.unit;
-
-                // ✅ Convertir la quantité vendue en unité de base
-                const quantityDeducted = convertUnit(item.quantity, unitSold, produit.unit);
-
-                // Vérifier le stock
-                if (produit.stock < quantityDeducted) {
-                    errors.push(
-                        `Stock insuffisant pour ${produit.name}: ${produit.stock} ${produit.unit} disponible, ${quantityDeducted} ${produit.unit} demandé`
-                    );
-                    console.warn("❌ Stock insuffisant :", {
-                        productId: produit._id,
-                        available: produit.stock,
-                        requested: quantityDeducted
-                    });
-                    continue;
-                }
-
-                // ✅ Calculer le prix (avec possibilité de prix personnalisé)
-                let itemTotal: number;
-                let unitPrice: number;
-
-                if (item.customPrice !== undefined && item.customPrice >= 0) {
-                    itemTotal = item.customPrice;
-                    unitPrice = item.customPrice / item.quantity;
-                } else if (item.price !== undefined && item.price >= 0) {
-                    // Prix unitaire fourni directement
-                    unitPrice = item.price;
-                    itemTotal = item.price * item.quantity;
-                } else {
-                    // Calculer selon le prix de base
-                    itemTotal = calculatePrice(produit.basePrice, produit.unit, unitSold, item.quantity);
-                    unitPrice = itemTotal / item.quantity;
-                }
-
-                // ✅ Déduire du stock
-                const oldStock = produit.stock;
-                produit.stock -= quantityDeducted;
-                await produit.save();
-
-                // ✅ Ajouter à la liste des items vendus
-                ventesItems.push({
-                    productId: produit._id,
-                    productName: produit.name,
-                    quantitySold: item.quantity,
-                    unitSold: unitSold,
-                    quantityDeducted: quantityDeducted,
-                    unitBase: produit.unit,
-                    unitPrice: unitPrice,
-                    total: itemTotal
-                });
-
-                totalAmount += itemTotal;
-
-                console.log("✅ Item vendu :", {
-                    productId: produit._id,
-                    oldStock,
-                    newStock: produit.stock,
-                    quantitySold: item.quantity,
-                    unitSold,
-                    quantityDeducted
-                });
-
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                errors.push(`Erreur avec ${item.productName || 'un item'}: ${msg}`);
-                console.error("🔥 Erreur item :", msg);
+            if (!item.productId || !item.quantity || item.quantity <= 0) {
+                errors.push(`Item incomplet: ${item.productName || "Inconnu"}`);
+                continue;
             }
+
+            const produit = await Produit.findOne({ _id: item.productId, tenant_id: tenantId });
+            if (!produit) {
+                errors.push(`Produit introuvable: ${item.productName || item.productId}`);
+                continue;
+            }
+
+            if (!boutique_id) boutique_id = produit.boutique_id;
+
+            const unitSold = item.unit || produit.unit;
+            const quantityDeducted = convertUnit(item.quantity, unitSold, produit.unit);
+
+            if (produit.stock < quantityDeducted) {
+                errors.push(`Stock insuffisant pour ${produit.name}: ${produit.stock} ${produit.unit} dispo`);
+                continue;
+            }
+
+            let itemTotal: number;
+            let unitPrice: number;
+
+            if (item.customPrice !== undefined && item.customPrice >= 0) {
+                itemTotal = item.customPrice;
+                unitPrice = item.customPrice / item.quantity;
+            } else if (item.price !== undefined && item.price >= 0) {
+                unitPrice = item.price;
+                itemTotal = item.price * item.quantity;
+            } else {
+                itemTotal = calculatePrice(produit.basePrice, produit.unit, unitSold, item.quantity);
+                unitPrice = itemTotal / item.quantity;
+            }
+
+            await Produit.findByIdAndUpdate(produit._id, { $inc: { stock: -quantityDeducted } });
+
+            ventesItems.push({
+                productId: produit._id,
+                productName: produit.name,
+                quantitySold: item.quantity,
+                unitSold,
+                quantityDeducted,
+                unitBase: produit.unit,
+                unitPrice,
+                total: itemTotal,
+            });
+
+            totalAmount += itemTotal;
         }
 
-        if (ventesItems.length === 0 && errors.length > 0) {
-            console.warn("❌ Toutes les ventes ont échoué :", errors);
+        if (ventesItems.length === 0 && errors.length > 0)
             return c.json({ error: "Échec de la vente", details: errors }, 400);
-        }
 
-        // ✅ Enregistrer la vente globale
         const nouvelleVente = await Vente.create({
-            boutique_id: boutique_id,
+            tenant_id: tenantId,
+            boutique_id: boutique_id ?? body.boutique_id,
             items: ventesItems,
-            totalAmount: totalAmount,
-            date: body.date ? new Date(body.date) : new Date()
+            totalAmount,
+            date: body.date ? new Date(body.date) : new Date(),
         });
 
-        let message = "Vente validée avec succès";
-        if (errors.length > 0) message = `Vente partiellement validée. ${errors.length} erreur(s)`;
-
-        console.log("🎉 Vente globale terminée :", { ventesCount: ventesItems.length, errors });
-
-        return c.json({
-            success: true,
-            message,
-            data: {
-                vente: nouvelleVente,
-                itemsVendus: ventesItems.length,
-                montantTotal: nouvelleVente.totalAmount,
-                erreurs: errors.length > 0 ? errors : undefined
-            }
-        }, 201);
-
+        return c.json(
+            {
+                success: true,
+                message: errors.length > 0 ? `Vente partiellement validée. ${errors.length} erreur(s)` : "Vente validée",
+                data: {
+                    vente: nouvelleVente,
+                    itemsVendus: ventesItems.length,
+                    montantTotal: nouvelleVente.totalAmount,
+                    erreurs: errors.length > 0 ? errors : undefined,
+                },
+            },
+            201
+        );
     } catch (error) {
-        const err = error as Error;
-        console.error("🔥 Erreur validerVente :", err);
-        return c.json({ error: err.message }, 500);
-    } finally {
-        console.groupEnd();
+        return c.json({ error: (error as Error).message }, 500);
     }
 };
 
-// ➤ Récupérer l'historique des ventes (avec filtre boutique)
-export const getHistoriqueVentes = async (c: Context) => {
+// ─── Historique des ventes ───────────────────────────────────────────────────
+export const getHistoriqueVentes = async (c: Context<AppEnv>) => {
     try {
-        console.log("🔵 getHistoriqueVentes appelé");
-        const { limit = 50, page = 1, dateFrom, dateTo, boutique_id } = c.req.query();
+        const tenantId = c.get("tenantId");
+        const plan = c.get("plan");
+        const { limit = "50", page = "1", dateFrom, dateTo, boutique_id } = c.req.query();
 
-        const query: any = {};
+        const query: Record<string, unknown> = { tenant_id: tenantId };
+        if (boutique_id) query.boutique_id = boutique_id;
 
-        // ✅ Filtre direct par boutique_id dans la vente
-        if (boutique_id) {
-            query.boutique_id = boutique_id;
+        // Limiter l'historique selon le plan
+        const { PLAN_LIMITS } = await import("../utils/plan.limits.js");
+        const joursMax = PLAN_LIMITS[plan].historiqueJours;
+        if (joursMax !== -1) {
+            const dateMin = new Date();
+            dateMin.setDate(dateMin.getDate() - joursMax);
+            query.date = { $gte: dateMin };
         }
 
         if (dateFrom || dateTo) {
-            query.date = {};
-            if (dateFrom) query.date.$gte = new Date(dateFrom as string);
-            if (dateTo) query.date.$lte = new Date(dateTo as string);
+            const dateFilter = (query.date as Record<string, Date>) || {};
+            if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+            if (dateTo) dateFilter.$lte = new Date(dateTo);
+            query.date = dateFilter;
         }
 
-        const limitNum = parseInt(limit as string);
-        const pageNum = parseInt(page as string);
+        const limitNum = parseInt(limit);
+        const pageNum = parseInt(page);
         const skip = (pageNum - 1) * limitNum;
 
         const [ventes, total] = await Promise.all([
-            Vente.find(query).sort({ date: -1 }).skip(skip).limit(limitNum),
-            Vente.countDocuments(query)
+            Vente.find(query).sort({ date: -1 }).skip(skip).limit(limitNum).lean(),
+            Vente.countDocuments(query),
         ]);
 
-        // Calcul des statistiques
-        let totalMontant = 0;
-        let totalArticles = 0;
-
-        for (const vente of ventes) {
-            totalMontant += vente.totalAmount;
-            for (const item of vente.items) {
-                totalArticles += item.quantitySold;
-            }
-        }
+        const totalMontant = ventes.reduce((sum, v) => sum + v.totalAmount, 0);
 
         return c.json({
             success: true,
             data: {
                 ventes,
-                pagination: {
-                    total,
-                    page: pageNum,
-                    limit: limitNum,
-                    pages: Math.ceil(total / limitNum)
-                },
-                statistiques: {
-                    totalMontant,
-                    totalArticles,
-                    nombreVentes: total
-                }
-            }
+                pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+                statistiques: { totalMontant, nombreVentes: total },
+            },
         });
     } catch (error) {
-        console.error("❌ ERREUR:", error);
         return c.json({ error: (error as Error).message }, 500);
     }
 };
 
-
-export const getStatistiquesVentes = async (c: Context) => {
-  try {
-    const { periode = "jour", boutique_id } = c.req.query();
-    let matchStage: any = {};
-
-    // ✅ BON FILTRE BOUTIQUE
-    if (boutique_id) {
-        
-       matchStage.boutique_id = new mongoose.Types.ObjectId(boutique_id);
-    }
-
-    const now = new Date();
-
-    if (periode === "jour") {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      matchStage.date = { $gte: start, $lt: end };
-    }
-
-    if (periode === "mois") {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      matchStage.date = { $gte: start, $lt: end };
-    }
-
-    const globalStats = await Vente.aggregate([
-      { $match: matchStage },
-      {
-        $group: {
-          _id: null,
-          totalVentes: { $sum: 1 },
-          montantTotal: { $sum: "$totalAmount" },
-          moyennePanier: { $avg: "$totalAmount" }
-        }
-      }
-    ]);
-
-    const topProduits = await Vente.aggregate([
-      { $match: matchStage },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: "$items.productId",
-          productName: { $first: "$items.productName" },
-          quantiteVendue: { $sum: "$items.quantitySold" }
-        }
-      }
-    ]);
-
-    return c.json({
-      success: true,
-      data: {
-        global: globalStats[0] || {
-          totalVentes: 0,
-          montantTotal: 0,
-          moyennePanier: 0
-        },
-        topProduits
-      }
-    });
-  } catch (e) {
-    console.error(e);
-    return c.json({ error: "Erreur stats" }, 500);
-  }
-};
-
-
-// ➤ Récupérer toutes les boutiques (pour admin)
-export const getBoutiques = async (c: Context) => {
+// ─── Stats ventes (Business+) ────────────────────────────────────────────────
+export const getStatistiquesVentes = async (c: Context<AppEnv>) => {
     try {
-        const boutiques = await Boutique.find()
-            .populate("responsable_id", "name email")
-            .sort({ name: 1 });
+        const tenantId = c.get("tenantId");
+        const { periode = "jour", boutique_id } = c.req.query();
+
+        const matchStage: Record<string, unknown> = {
+            tenant_id: new mongoose.Types.ObjectId(tenantId),
+        };
+        if (boutique_id) matchStage.boutique_id = new mongoose.Types.ObjectId(boutique_id);
+
+        const now = new Date();
+        if (periode === "jour") {
+            matchStage.date = {
+                $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+                $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1),
+            };
+        } else if (periode === "mois") {
+            matchStage.date = {
+                $gte: new Date(now.getFullYear(), now.getMonth(), 1),
+                $lt: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+            };
+        }
+
+        const [globalStats, topProduits] = await Promise.all([
+            Vente.aggregate([
+                { $match: matchStage },
+                { $group: { _id: null, totalVentes: { $sum: 1 }, montantTotal: { $sum: "$totalAmount" }, moyennePanier: { $avg: "$totalAmount" } } },
+            ]),
+            Vente.aggregate([
+                { $match: matchStage },
+                { $unwind: "$items" },
+                { $group: { _id: "$items.productId", productName: { $first: "$items.productName" }, quantiteVendue: { $sum: "$items.quantitySold" }, totalRevenu: { $sum: "$items.total" } } },
+                { $sort: { quantiteVendue: -1 } },
+                { $limit: 10 },
+            ]),
+        ]);
 
         return c.json({
             success: true,
-            data: boutiques
+            data: {
+                global: globalStats[0] || { totalVentes: 0, montantTotal: 0, moyennePanier: 0 },
+                topProduits,
+            },
         });
     } catch (error) {
-        const err = error as Error;
-        return c.json({ error: err.message }, 500);
+        return c.json({ error: (error as Error).message }, 500);
     }
 };
 
-// ➤ Récupérer une vente spécifique
-export const getVenteById = async (c: Context) => {
+// ─── Récupérer une vente ─────────────────────────────────────────────────────
+export const getVenteById = async (c: Context<AppEnv>) => {
     try {
+        const tenantId = c.get("tenantId");
         const id = c.req.param("id");
-        const vente = await Vente.findById(id);
-
+        const vente = await Vente.findOne({ _id: id, tenant_id: tenantId }).lean();
         if (!vente) return c.json({ error: "Vente introuvable" }, 404);
-        return c.json({
-            success: true,
-            data: vente
-        });
+        return c.json({ success: true, data: vente });
     } catch (error) {
-        const err = error as Error;
-        return c.json({ error: err.message }, 500);
+        return c.json({ error: (error as Error).message }, 500);
     }
 };

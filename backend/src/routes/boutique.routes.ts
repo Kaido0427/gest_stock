@@ -1,12 +1,15 @@
-import { Hono } from 'hono';
+import { Hono } from "hono";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { subscriptionGuard } from "../middlewares/subscription.guard.js";
+import { managerGuard } from "../middlewares/admin.guard.js";
+import { getAllBoutiques, getBoutique } from "../controllers/boutique.controller.js";
+import type { AppEnv } from "../types/app.type.js";
 
-import {
-    getAllBoutiques,
-    seedBoutiques
-} from '../controllers/boutique.controller.js';
+export const boutiqueRouter = new Hono<AppEnv>();
 
-export const boutiqueRouter = new Hono();
+boutiqueRouter.use("*", authMiddleware);
+boutiqueRouter.use("*", subscriptionGuard);
+boutiqueRouter.use("*", managerGuard);
 
-// Route pour récupérer toutes les boutiques
-boutiqueRouter.get('/', getAllBoutiques); 
-boutiqueRouter.post('/seed', seedBoutiques); 
+boutiqueRouter.get("/", getAllBoutiques);
+boutiqueRouter.get("/:id", getBoutique);

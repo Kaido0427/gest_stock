@@ -1,110 +1,52 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 
-// ✅ Interface pour les items vendus - AVEC conversion
-interface IItemVendu {
+export interface IVenteItem {
     productId: Types.ObjectId;
     productName: string;
-    
-    // ✅ Quantité et unité DE VENTE (ce que le client achète)
     quantitySold: number;
-    unitSold: string; // L'unité choisie à la vente (peut être différente de l'unité de base)
-    
-    // ✅ Quantité déductible du stock (convertie en unité de base)
+    unitSold: string;
     quantityDeducted: number;
-    unitBase: string; // L'unité de base du produit
-    
-    // ✅ Prix
-    unitPrice: number; // Prix par unité vendue
+    unitBase: string;
+    unitPrice: number;
     total: number;
 }
 
-// Interface pour une vente
-interface IVente {
+export interface IVente extends Document {
+    tenant_id: Types.ObjectId;
     boutique_id: Types.ObjectId;
-    items: IItemVendu[];
+    items: IVenteItem[];
     totalAmount: number;
     date: Date;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
-interface IVenteDocument extends IVente, Document { }
-
-const ItemVenduSchema = new Schema<IItemVendu>(
+const VenteItemSchema = new Schema<IVenteItem>(
     {
-        productId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Produit',
-            required: true
-        },
-        productName: {
-            type: String,
-            required: true
-        },
-        quantitySold: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        unitSold: {
-            type: String,
-            required: true
-        },
-        quantityDeducted: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        unitBase: {
-            type: String,
-            required: true
-        },
-        unitPrice: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        total: {
-            type: Number,
-            required: true,
-            min: 0
-        }
+        productId: { type: Schema.Types.ObjectId, ref: "Produit", required: true },
+        productName: { type: String, required: true },
+        quantitySold: { type: Number, required: true },
+        unitSold: { type: String, required: true },
+        quantityDeducted: { type: Number, required: true },
+        unitBase: { type: String, required: true },
+        unitPrice: { type: Number, required: true },
+        total: { type: Number, required: true },
     },
     { _id: false }
 );
 
-const VenteSchema = new Schema<IVenteDocument>(
+const VenteSchema = new Schema<IVente>(
     {
-        boutique_id: {
-            type: Schema.Types.ObjectId,
-            ref: "Boutique",
-            required: true
-        },
-        items: [ItemVenduSchema],
-        totalAmount: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        date: {
-            type: Date,
-            default: Date.now
-        }
+        tenant_id: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+        boutique_id: { type: Schema.Types.ObjectId, ref: "Boutique", required: true },
+        items: { type: [VenteItemSchema], required: true },
+        totalAmount: { type: Number, required: true },
+        date: { type: Date, default: Date.now },
     },
-    {
-        timestamps: true,
-        toJSON: { virtuals: true },
-        toObject: { virtuals: true }
-    }
+    { timestamps: true }
 );
 
-// Virtual pour compter le nombre d'articles
-VenteSchema.virtual("itemsCount").get(function () {
-    return this.items.reduce((total, item) => total + item.quantitySold, 0);
-});
+VenteSchema.index({ tenant_id: 1, date: -1 });
+VenteSchema.index({ tenant_id: 1, boutique_id: 1, date: -1 });
 
-// Index pour les recherches
-VenteSchema.index({ date: -1 });
-VenteSchema.index({ totalAmount: -1 });
-VenteSchema.index({ boutique_id: 1, date: -1 });
-
-export const Vente = mongoose.model<IVenteDocument>("Vente", VenteSchema);
-export type { IVente, IVenteDocument, IItemVendu };
+export const Vente = mongoose.model<IVente>("Vente", VenteSchema);

@@ -1,44 +1,35 @@
-// hooks/useAuth.js
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { login, logout, getCurrentUser } from "../services/auth";
+import { getCurrentUser, login, logout, register } from "../services/auth";
 
-export const authKeys = {
-  me: ["auth", "me"],
-};
-
-export function useCurrentUser() {
-  return useQuery({
-    queryKey: authKeys.me,
-    queryFn: async () => {
-      const user = await getCurrentUser();
-      return user ?? null;
-    },
-    staleTime: Infinity,
+export const useMe = () =>
+  useQuery({
+    queryKey: ["me"],
+    queryFn: getCurrentUser,
     retry: false,
+    staleTime: 5 * 60 * 1000,
   });
-}
 
-export function useLogin() {
+export const useLogin = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ email, password }) => {
-      const res = await login(email, password);
-      if (res.error) throw new Error(res.error);
-      return res;
-    },
-    onSuccess: (data) => {
-      // Met en cache l'utilisateur connecté
-      queryClient.setQueryData(authKeys.me, data.user ?? data);
-    },
+    mutationFn: ({ email, password }) => login(email, password),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
   });
-}
+};
 
-export function useLogout() {
+export const useRegister = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, password, name, boutiqueName }) =>
+      register(email, password, name, boutiqueName),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+  });
+};
+
+export const useLogout = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
-    onSettled: () => {
-      queryClient.clear();
-    },
+    onSuccess: () => queryClient.clear(),
   });
-}
+};

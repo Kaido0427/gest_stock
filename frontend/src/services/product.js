@@ -1,60 +1,46 @@
-// frontend/src/services/product.js
-const API_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/produit`
-  : "http://localhost:3000/produit";
+import api from "./api";
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
-async function apiFetch(url, options = {}) {
-  try {
-    const res = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || `Erreur HTTP ${res.status}` };
-    return data;
-  } catch {
-    return { error: "Serveur injoignable" };
-  }
-}
+export const getProduits = async (params = {}) => {
+  const { data } = await api.get("/produits", { params });
+  return data;
+};
 
-// ─── CREATE ───────────────────────────────────────────────────────────────────
-export const addProduitMultiBoutiques = (produitData) =>
-  apiFetch(`${API_URL}/multi-boutiques`, { method: "POST", body: JSON.stringify(produitData) });
+export const getProduit = async (id) => {
+  const { data } = await api.get(`/produits/${id}`);
+  return data;
+};
 
-export const addProduit = (produit) =>
-  apiFetch(`${API_URL}`, { method: "POST", body: JSON.stringify(produit) });
+export const addProduit = async (produit) => {
+  const { data } = await api.post("/produits", produit);
+  return data;
+};
 
-// ─── READ ─────────────────────────────────────────────────────────────────────
+export const updateProduit = async (id, updates) => {
+  const { data } = await api.put(`/produits/${id}`, updates);
+  return data;
+};
 
-// ✅ FIX : Support pagination + filtre boutique côté API
-// params: { page, limit, boutique_id }
-export async function getProduits(params = {}) {
-  const qs = new URLSearchParams();
-  if (params.page)       qs.set("page", params.page);
-  if (params.limit)      qs.set("limit", params.limit);
-  if (params.boutique_id) qs.set("boutique_id", params.boutique_id);
-  if (params.search)    qs.set("search", params.search);
-  const query = qs.toString() ? `?${qs}` : "";
-  return apiFetch(`${API_URL}${query}`);
-}
+export const deleteProduit = async (id) => {
+  const { data } = await api.delete(`/produits/${id}`);
+  return data;
+};
 
-export const getProduit = (id) => apiFetch(`${API_URL}/${id}`);
+export const approvisionnerProduit = async (id, payload) => {
+  const { data } = await api.post(`/produits/${id}/approvisionner`, payload);
+  return data;
+};
 
-export const getProduitsByBoutique = (boutiqueId) =>
-  apiFetch(`${API_URL}/boutique/${boutiqueId}`);
+export const vendreProduit = async (id, payload) => {
+  const { data } = await api.post(`/produits/${id}/vendre`, payload);
+  return data;
+};
 
-// ─── UPDATE ───────────────────────────────────────────────────────────────────
-export const updateProduit = (id, updates) =>
-  apiFetch(`${API_URL}/${id}`, { method: "PUT", body: JSON.stringify(updates) });
+export const transfertStock = async (payload) => {
+  const { data } = await api.post("/produits/transfert-stock", payload);
+  return data;
+};
 
-// ─── DELETE ───────────────────────────────────────────────────────────────────
-export const deleteProduit = (id) =>
-  apiFetch(`${API_URL}/${id}`, { method: "DELETE" });
-
-// ─── STOCK OPS ────────────────────────────────────────────────────────────────
-export const approvisionnerProduit = (productId, data) =>
-  apiFetch(`${API_URL}/${productId}/approvisionner`, { method: "POST", body: JSON.stringify(data) });
-
-export const transfertStockBoutiques = (data) =>
-  apiFetch(`${API_URL}/transfert-stock`, { method: "POST", body: JSON.stringify(data) });
+export const getAlertesStock = async (params = {}) => {
+  const { data } = await api.get("/produits/alertes-stock", { params });
+  return data;
+};

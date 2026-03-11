@@ -1,5 +1,8 @@
-// backend/src/routes/produit.route.ts
-import { Hono } from 'hono';
+import { Hono } from "hono";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+import { subscriptionGuard } from "../middlewares/subscription.guard.js";
+import { planFeatureGuard } from "../middlewares/plan.guard.js";
+import { managerGuard } from "../middlewares/admin.guard.js";
 import {
   createProduit,
   getProduit,
@@ -8,37 +11,29 @@ import {
   deleteProduit,
   vendreProduit,
   getAlertesStock,
-  getProduitsByBoutique,
   transfertStockBoutiques,
   approvisionnerProduit,
-  createProduitMultiBoutiques,
-} from '../controllers/produit.controller.js';
+} from "../controllers/produit.controller.js";
+import type { AppEnv } from "../types/app.type.js";
 
-const produitRoutes = new Hono();
+const produitRoutes = new Hono<AppEnv>();
 
-// ========================================
-// ✅ ORDRE CORRECT DES ROUTES
-// ========================================
+produitRoutes.use("*", authMiddleware);
+produitRoutes.use("*", subscriptionGuard);
 
-// 1️⃣ Routes GET spécifiques AVANT /:id
-produitRoutes.get('/alertes-stock', getAlertesStock);
-produitRoutes.get('/produitByBoutique/:boutiqueId', getProduitsByBoutique);
+produitRoutes.get("/alertes-stock", getAlertesStock);
+produitRoutes.post(
+  "/transfert-stock",
+  planFeatureGuard("transfertInterBoutiques"),
+  transfertStockBoutiques
+);
 
-// 2️⃣ Routes POST spécifiques AVANT /:id
-produitRoutes.post('/transfert-stock', transfertStockBoutiques);
-
-// 3️⃣ CRUD de base
-produitRoutes.post('/multi-boutiques', createProduitMultiBoutiques);
-produitRoutes.post('/', createProduit);
-produitRoutes.get('/', getAllProduits);
-
-// 4️⃣ Routes avec paramètre :id (TOUJOURS EN DERNIER)
-produitRoutes.get('/:id', getProduit);
-produitRoutes.put('/:id', updateProduit);
-produitRoutes.delete('/:id', deleteProduit);
-
-// 5️⃣ Routes POST avec :id et action
-produitRoutes.post('/:id/vendre', vendreProduit);
-produitRoutes.post('/:id/approvisionner', approvisionnerProduit);
+produitRoutes.post("/", managerGuard, createProduit);
+produitRoutes.get("/", getAllProduits);
+produitRoutes.get("/:id", getProduit);
+produitRoutes.put("/:id", managerGuard, updateProduit);
+produitRoutes.delete("/:id", managerGuard, deleteProduit);
+produitRoutes.post("/:id/vendre", vendreProduit);
+produitRoutes.post("/:id/approvisionner", managerGuard, approvisionnerProduit);
 
 export default produitRoutes;
