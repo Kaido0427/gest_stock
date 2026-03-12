@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
-import type { AppEnv } from "../types/app.type.js";
-import type { UserRole } from "../models/user.model.js";
+import type { AppEnv } from "../types/app.type";
+import type { UserRole } from "../models/user.model";
 
 export const roleGuard = (...allowedRoles: UserRole[]) => {
     return async (c: Context<AppEnv>, next: Next): Promise<Response | void> => {

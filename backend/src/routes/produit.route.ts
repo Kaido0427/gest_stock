@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
-import { subscriptionGuard } from "../middlewares/subscription.guard.js";
-import { planFeatureGuard } from "../middlewares/plan.guard.js";
-import { managerGuard } from "../middlewares/admin.guard.js";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { subscriptionGuard } from "../middlewares/subscription.guard";
+import { planFeatureGuard } from "../middlewares/plan.guard";
+import { managerGuard } from "../middlewares/admin.guard";
 import {
   createProduit,
   getProduit,
@@ -13,8 +13,8 @@ import {
   getAlertesStock,
   transfertStockBoutiques,
   approvisionnerProduit,
-} from "../controllers/produit.controller.js";
-import type { AppEnv } from "../types/app.type.js";
+} from "../controllers/produit.controller";
+import type { AppEnv } from "../types/app.type";
 
 const produitRoutes = new Hono<AppEnv>();
 

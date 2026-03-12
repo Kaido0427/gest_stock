@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
-import type { PlanType } from "../utils/plan.limits.js";
+import type { PlanType } from "../utils/plan.limits";
 
 export type SubscriptionStatus = "active" | "cancelled" | "expired";
 

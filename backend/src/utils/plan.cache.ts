@@ -1,4 +1,4 @@
-import { Plan, type IPlan } from "../models/plan.model.js";
+import { Plan, type IPlan } from "../models/plan.model";
 
 // Cache en mémoire avec TTL de 60 secondes
 // Évite une requête DB à chaque appel de middleware

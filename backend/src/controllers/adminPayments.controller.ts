@@ -1,9 +1,9 @@
 import type { Context } from "hono";
-import { Subscription } from "../models/subscription.model.js";
-import { Tenant } from "../models/tenant.model.js";
-import { Plan } from "../models/plan.model.js";
-import { invalidatePlanCache } from "../utils/plan.cache.js";
-import type { AppEnv } from "../types/app.type.js";
+import { Subscription } from "../models/subscription.model";
+import { Tenant } from "../models/tenant.model";
+import { Plan } from "../models/plan.model";
+import { invalidatePlanCache } from "../utils/plan.cache";
+import type { AppEnv } from "../types/app.type";
 
 // ─── Historique de tous les paiements ────────────────────────────────────────
 export const getAllPayments = async (c: Context<AppEnv>) => {

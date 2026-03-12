@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import bcrypt from "bcryptjs";
-import { User } from "../models/user.model.js";
-import { Plan } from "../models/plan.model.js";
-import { invalidateAllPlansCache } from "../utils/plan.cache.js";
+import { User } from "../models/user.model";
+import { Plan } from "../models/plan.model";
+import { invalidateAllPlansCache } from "../utils/plan.cache";
 
 const seedRoutes = new Hono();
 

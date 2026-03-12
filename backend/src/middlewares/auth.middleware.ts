@@ -1,8 +1,8 @@
 import type { Context, Next } from "hono";
-import { verifyToken } from "../utils/jtw.js";
-import { User } from "../models/user.model.js";
-import { Tenant } from "../models/tenant.model.js";
-import type { AppEnv } from "../types/app.type.js";
+import { verifyToken } from "../utils/jtw";
+import { User } from "../models/user.model";
+import { Tenant } from "../models/tenant.model";
+import type { AppEnv } from "../types/app.type";
 
 const tokenBlacklist = new Set<string>();
 

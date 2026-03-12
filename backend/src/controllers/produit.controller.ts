@@ -1,8 +1,8 @@
 import type { Context } from "hono";
-import { Produit, UnitType } from "../models/produit.model.js";
-import { Vente } from "../models/vente.model.js";
+import { Produit, UnitType } from "../models/produit.model";
+import { Vente } from "../models/vente.model";
 import mongoose from "mongoose";
-import type { AppEnv } from "../types/app.type.js";
+import type { AppEnv } from "../types/app.type";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number => {

@@ -1,11 +1,11 @@
 import type { Context } from "hono";
-import { Plan } from "../models/plan.model.js";
-import { PlanRequest } from "../models/planRequest.model.js";
-import { Tenant } from "../models/tenant.model.js";
-import { Subscription } from "../models/subscription.model.js";
-import { User } from "../models/user.model.js";
-import { invalidateAllPlansCache, invalidatePlanCache } from "../utils/plan.cache.js";
-import type { AppEnv } from "../types/app.type.js";
+import { Plan } from "../models/plan.model";
+import { PlanRequest } from "../models/planRequest.model";
+import { Tenant } from "../models/tenant.model";
+import { Subscription } from "../models/subscription.model";
+import { User } from "../models/user.model";
+import { invalidateAllPlansCache, invalidatePlanCache } from "../utils/plan.cache";
+import type { AppEnv } from "../types/app.type";
 
 // ─── Liste tous les plans (actifs + inactifs pour l'admin) ───────────────────
 export const getPlans = async (c: Context<AppEnv>) => {

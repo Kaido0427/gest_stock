@@ -1,6 +1,6 @@
 import type { Context } from "hono";
-import { Boutique } from "../models/boutique.model.js";
-import type { AppEnv } from "../types/app.type.js";
+import { Boutique } from "../models/boutique.model";
+import type { AppEnv } from "../types/app.type";
 
 export const getAllBoutiques = async (c: Context<AppEnv>) => {
   try {

@@ -1,9 +1,9 @@
 import type { Context } from "hono";
-import { PlanRequest } from "../models/planRequest.model.js";
-import { Tenant } from "../models/tenant.model.js";
-import { Plan } from "../models/plan.model.js";
-import { getAllActivePlans } from "../utils/plan.cache.js";
-import type { AppEnv } from "../types/app.type.js";
+import { PlanRequest } from "../models/planRequest.model";
+import { Tenant } from "../models/tenant.model";
+import { Plan } from "../models/plan.model";
+import { getAllActivePlans } from "../utils/plan.cache";
+import type { AppEnv } from "../types/app.type";
 
 // ─── Liste des plans disponibles (pour la page compte tenant) ────────────────
 export const getAvailablePlans = async (c: Context<AppEnv>) => {

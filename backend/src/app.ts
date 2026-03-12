@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { authRoutes } from "./routes/auth.route.js";
-import { accountRoutes } from "./routes/account.route.js";
-import { adminRoutes } from "./routes/admin.route.js";
-import { boutiqueRouter } from "./routes/boutique.routes.js";
-import produitRoutes from "./routes/produit.route.js";
-import venteRoutes from "./routes/vente.routes.js";
-import { seedRoutes } from "./routes/seed.route.js";
-import type { AppEnv } from "./types/app.type.js";
+import { authRoutes } from "./routes/auth.route";
+import { accountRoutes } from "./routes/account.route";
+import { adminRoutes } from "./routes/admin.route";
+import { boutiqueRouter } from "./routes/boutique.routes";
+import produitRoutes from "./routes/produit.route";
+import venteRoutes from "./routes/vente.routes";
+import { seedRoutes } from "./routes/seed.route";
+import type { AppEnv } from "./types/app.type";
 
 const app = new Hono<AppEnv>();
 

@@ -1,14 +1,14 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
-import { subscriptionGuard } from "../middlewares/subscription.guard.js";
-import { planFeatureGuard } from "../middlewares/plan.guard.js";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { subscriptionGuard } from "../middlewares/subscription.guard";
+import { planFeatureGuard } from "../middlewares/plan.guard";
 import {
     validerVente,
     getHistoriqueVentes,
     getStatistiquesVentes,
     getVenteById,
-} from "../controllers/vente.controller.js";
-import type { AppEnv } from "../types/app.type.js";
+} from "../controllers/vente.controller";
+import type { AppEnv } from "../types/app.type";
 
 const venteRoutes = new Hono<AppEnv>();
 

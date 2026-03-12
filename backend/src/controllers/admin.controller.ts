@@ -1,10 +1,10 @@
 import type { Context } from "hono";
-import { Tenant } from "../models/tenant.model.js";
-import { User } from "../models/user.model.js";
-import { Subscription } from "../models/subscription.model.js";
-import { PLAN_PRICES, PLAN_LIMITS, type PlanType } from "../utils/plan.limits.js";
-import type { AppEnv } from "../types/app.type.js";
-import type { TenantStatus } from "../models/tenant.model.js";
+import { Tenant } from "../models/tenant.model";
+import { User } from "../models/user.model";
+import { Subscription } from "../models/subscription.model";
+import { PLAN_PRICES, PLAN_LIMITS, type PlanType } from "../utils/plan.limits";
+import type { AppEnv } from "../types/app.type";
+import type { TenantStatus } from "../models/tenant.model";
 
 // ─── Liste tous les tenants ──────────────────────────────────────────────────
 export const getAllTenants = async (c: Context<AppEnv>) => {

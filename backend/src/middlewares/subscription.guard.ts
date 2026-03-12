@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
-import { Tenant } from "../models/tenant.model.js";
-import type { AppEnv } from "../types/app.type.js";
+import { Tenant } from "../models/tenant.model";
+import type { AppEnv } from "../types/app.type";
 
 export const subscriptionGuard = async (c: Context<AppEnv>, next: Next): Promise<Response | void> => {
     const userRole = c.get("userRole");

@@ -1,18 +1,18 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
-import { subscriptionGuard } from "../middlewares/subscription.guard.js";
-import { ownerGuard, managerGuard } from "../middlewares/admin.guard.js";
-import { planQuotaGuard } from "../middlewares/plan.guard.js";
-import { Boutique } from "../models/boutique.model.js";
-import { User } from "../models/user.model.js";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { subscriptionGuard } from "../middlewares/subscription.guard";
+import { ownerGuard, managerGuard } from "../middlewares/admin.guard";
+import { planQuotaGuard } from "../middlewares/plan.guard";
+import { Boutique } from "../models/boutique.model";
+import { User } from "../models/user.model";
 import {
     getAccount, updateAccount, createBoutiqueAnnexe,
     updateBoutique, deleteBoutiqueAnnexe, inviterEmploye, toggleEmploye,
-} from "../controllers/account.controller.js";
+} from "../controllers/account.controller";
 import {
     getAvailablePlans, requestPlanUpgrade, getMyPlanRequests,
-} from "../controllers/planRequest.controller.js";
-import type { AppEnv } from "../types/app.type.js";
+} from "../controllers/planRequest.controller";
+import type { AppEnv } from "../types/app.type";
 
 export const accountRoutes = new Hono<AppEnv>();
 

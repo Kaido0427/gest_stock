@@ -1,5 +1,5 @@
-import type { UserRole } from "../models/user.model.js";
-import type { PlanType } from "../utils/plan.limits.js";
+import type { UserRole } from "../models/user.model";
+import type { PlanType } from "../utils/plan.limits";
 
 export type AppVariables = {
   userId: string;

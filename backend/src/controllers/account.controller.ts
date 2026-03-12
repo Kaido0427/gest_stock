@@ -1,11 +1,11 @@
 import type { Context } from "hono";
 import bcrypt from "bcryptjs";
-import { Tenant } from "../models/tenant.model.js";
-import { Boutique } from "../models/boutique.model.js";
-import { User } from "../models/user.model.js";
-import { Subscription } from "../models/subscription.model.js";
-import { PLAN_LIMITS, PLAN_PRICES, type PlanType } from "../utils/plan.limits.js";
-import type { AppEnv } from "../types/app.type.js";
+import { Tenant } from "../models/tenant.model";
+import { Boutique } from "../models/boutique.model";
+import { User } from "../models/user.model";
+import { Subscription } from "../models/subscription.model";
+import { PLAN_LIMITS, PLAN_PRICES, type PlanType } from "../utils/plan.limits";
+import type { AppEnv } from "../types/app.type";
 
 // ─── Récupérer les infos du compte ──────────────────────────────────────────
 export const getAccount = async (c: Context<AppEnv>) => {

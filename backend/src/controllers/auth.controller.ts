@@ -1,12 +1,12 @@
 import type { Context } from "hono";
 import bcrypt from "bcryptjs";
-import { User } from "../models/user.model.js";
-import { Tenant } from "../models/tenant.model.js";
-import { Boutique } from "../models/boutique.model.js";
-import { generateToken } from "../utils/jtw.js";
-import { addToBlacklist } from "../middlewares/auth.middleware.js";
-import { verifyToken } from "../utils/jtw.js";
-import type { AppEnv } from "../types/app.type.js";
+import { User } from "../models/user.model";
+import { Tenant } from "../models/tenant.model";
+import { Boutique } from "../models/boutique.model";
+import { generateToken } from "../utils/jtw";
+import { addToBlacklist } from "../middlewares/auth.middleware";
+import { verifyToken } from "../utils/jtw";
+import type { AppEnv } from "../types/app.type";
 
 export class AuthController {
     /**

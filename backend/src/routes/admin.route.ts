@@ -1,13 +1,13 @@
 import { Hono } from "hono";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
-import { adminGuard } from "../middlewares/admin.guard.js";
+import { authMiddleware } from "../middlewares/auth.middleware";
+import { adminGuard } from "../middlewares/admin.guard";
 import {
     getAllTenants,
     getTenant,
     setTenantStatus,
     setTenantPlan,
     getAdminStats,
-} from "../controllers/admin.controller.js";
+} from "../controllers/admin.controller";
 import {
     getPlans,
     createPlan,
@@ -16,13 +16,13 @@ import {
     togglePlan,
     getPlanRequests,
     processPlanRequest,
-} from "../controllers/adminPlans.controller.js";
+} from "../controllers/adminPlans.controller";
 import {
     getAllPayments,
     recordManualPayment,
     cancelSubscription,
-} from "../controllers/adminPayments.controller.js";
-import type { AppEnv } from "../types/app.type.js";
+} from "../controllers/adminPayments.controller";
+import type { AppEnv } from "../types/app.type";
 
 export const adminRoutes = new Hono<AppEnv>();
 

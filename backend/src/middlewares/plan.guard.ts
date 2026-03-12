@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
-import { getPlanByName } from "../utils/plan.cache.js";
-import type { AppEnv } from "../types/app.type.js";
+import { getPlanByName } from "../utils/plan.cache";
+import type { AppEnv } from "../types/app.type";
 
 export const planFeatureGuard = (feature: string) => {
     return async (c: Context<AppEnv>, next: Next): Promise<Response | void> => {
