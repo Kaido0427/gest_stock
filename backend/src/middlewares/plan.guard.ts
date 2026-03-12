@@ -1,71 +1,62 @@
 import type { Context, Next } from "hono";
-import { PLAN_LIMITS, type PlanLimits } from "../utils/plan.limits.js";
+import { getPlanByName } from "../utils/plan.cache.js";
 import type { AppEnv } from "../types/app.type.js";
 
-type PlanFeature = keyof PlanLimits;
-
-/**
- * Vérifie qu'une feature booléenne est activée pour le plan actuel
- * ex: planFeatureGuard("transfertInterBoutiques")
- */
-export const planFeatureGuard = (feature: PlanFeature) => {
+export const planFeatureGuard = (feature: string) => {
     return async (c: Context<AppEnv>, next: Next): Promise<Response | void> => {
         const userRole = c.get("userRole");
         if (userRole === "super_admin") return next();
 
-        const plan = c.get("plan");
-        const limits = PLAN_LIMITS[plan];
-        const value = limits[feature];
+        const planName = c.get("plan");
+        if (!planName) return c.json({ error: "Plan introuvable" }, 403);
 
-        if (value === false) {
-            return c.json(
-                {
-                    error: `Fonctionnalité non disponible sur votre plan (${plan}). Passez au plan supérieur.`,
-                    feature,
-                    currentPlan: plan,
-                },
-                403
-            );
+        const plan = await getPlanByName(planName);
+        if (!plan) return c.json({ error: `Plan "${planName}" introuvable en base` }, 403);
+
+        const value = plan.features?.[feature];
+        if (value === false || value === undefined) {
+            return c.json({
+                error: `La fonctionnalité "${feature}" n'est pas disponible sur le plan ${plan.label}. Passez à un plan supérieur.`,
+                feature,
+                currentPlan: planName,
+                upgradeRequired: true,
+            }, 403);
         }
-
         await next();
     };
 };
 
-/**
- * Vérifie un quota numérique (boutiques, produits, employes)
- * ex: planQuotaGuard("boutiques", () => Boutique.countDocuments({ tenant_id }))
- */
 export const planQuotaGuard = (
-    quota: PlanFeature,
+    quota: "boutiques" | "produits" | "employes",
     getCount: (tenantId: string) => Promise<number>
 ) => {
     return async (c: Context<AppEnv>, next: Next): Promise<Response | void> => {
         const userRole = c.get("userRole");
         if (userRole === "super_admin") return next();
 
-        const plan = c.get("plan");
-        const limits = PLAN_LIMITS[plan];
-        const max = limits[quota] as number;
+        const planName = c.get("plan");
+        if (!planName) return c.json({ error: "Plan introuvable" }, 403);
 
-        if (max === -1) return next(); // illimité
+        const plan = await getPlanByName(planName);
+        if (!plan) return c.json({ error: `Plan "${planName}" introuvable en base` }, 403);
+
+        const max = plan.limits?.[quota] as number;
+        if (max === -1) return next();
 
         const tenantId = c.get("tenantId");
+        if (!tenantId) return c.json({ error: "Tenant introuvable" }, 403);
+
         const current = await getCount(tenantId);
-
         if (current >= max) {
-            return c.json(
-                {
-                    error: `Limite atteinte pour votre plan (${plan}): max ${max} ${String(quota)}.`,
-                    quota,
-                    currentPlan: plan,
-                    limit: max,
-                    current,
-                },
-                403
-            );
+            return c.json({
+                error: `Limite atteinte : votre plan ${plan.label} autorise maximum ${max} ${quota}. Vous en avez déjà ${current}.`,
+                quota,
+                currentPlan: planName,
+                limit: max,
+                current,
+                upgradeRequired: true,
+            }, 403);
         }
-
         await next();
     };
 };

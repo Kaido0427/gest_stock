@@ -7,20 +7,23 @@ import DashboardPage from "./pages/DashboardPage";
 import ProduitsPage from "./pages/ProductPage";
 import VentesPage from "./pages/VentesPage";
 import ComptePage from "./pages/ComptePage";
-import AdminPage from "./pages/AdminPage";
+import AdminLayout from "./pages/admin/AdminLayout";
 
 const PAGES = {
   dashboard: DashboardPage,
   produits: ProduitsPage,
   ventes: VentesPage,
   compte: ComptePage,
-  admin: AdminPage,
+  admin: AdminLayout,
 };
 
 const App = () => {
   const { data: user, isLoading } = useMe();
   const { mutate: logout } = useLogout();
-  const [currentPage, setCurrentPage] = useState("dashboard");
+
+  // Le super_admin arrive directement sur "admin", les autres sur "dashboard"
+  const getDefaultPage = (u) => (u?.role === "super_admin" ? "admin" : "dashboard");
+  const [currentPage, setCurrentPage] = useState(null);
   const [authView, setAuthView] = useState("login");
 
   if (isLoading) {
@@ -39,9 +42,16 @@ const App = () => {
     );
   }
 
-  const PageComponent = PAGES[currentPage] || DashboardPage;
+  const activePage = currentPage ?? getDefaultPage(user);
+  const PageComponent = PAGES[activePage] || DashboardPage;
+
   return (
-    <AppLayout user={user} onLogout={logout} currentPage={currentPage} onPageChange={setCurrentPage}>
+    <AppLayout
+      user={user}
+      onLogout={logout}
+      currentPage={activePage}
+      onPageChange={setCurrentPage}
+    >
       <PageComponent />
     </AppLayout>
   );

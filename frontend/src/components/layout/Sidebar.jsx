@@ -1,8 +1,8 @@
 import React from "react";
 import {
   Home, ShoppingCart, Package, FileText,
-  Settings, X, Store, Users, Shield,
-  CreditCard, ChevronRight,
+  Settings, X, Store, Shield,
+  CreditCard, ChevronRight, LayoutDashboard,
 } from "lucide-react";
 
 const MENU = [
@@ -10,7 +10,7 @@ const MENU = [
     id: "dashboard",
     label: "Tableau de bord",
     icon: Home,
-    roles: ["owner", "manager", "employe", "super_admin"],
+    roles: ["owner", "manager", "employe"],
   },
   {
     id: "ventes",
@@ -38,23 +38,32 @@ const MENU = [
   },
   {
     id: "admin",
-    label: "Super Admin",
-    icon: Shield,
+    label: "Back-office",
+    icon: LayoutDashboard,
     roles: ["super_admin"],
   },
 ];
 
-const NavItem = ({ item, isActive, onClick }) => {
+const NavItem = ({ item, isActive, onClick, isAdmin }) => {
   const Icon = item.icon;
   return (
     <button
       onClick={() => onClick(item.id)}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group ${isActive
-          ? "bg-slate-900 text-white shadow-md"
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left group ${
+        isActive
+          ? isAdmin
+            ? "bg-indigo-600 text-white shadow-md"
+            : "bg-slate-900 text-white shadow-md"
+          : isAdmin
+          ? "text-slate-300 hover:bg-white/10 hover:text-white"
           : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-        }`}
+      }`}
     >
-      <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-white" : "text-slate-500 group-hover:text-slate-700"}`} />
+      <Icon
+        className={`w-5 h-5 flex-shrink-0 ${
+          isActive ? "text-white" : isAdmin ? "text-slate-400 group-hover:text-white" : "text-slate-500 group-hover:text-slate-700"
+        }`}
+      />
       <span className="text-sm font-semibold flex-1">{item.label}</span>
       {isActive && <ChevronRight className="w-4 h-4 opacity-60" />}
     </button>
@@ -63,9 +72,16 @@ const NavItem = ({ item, isActive, onClick }) => {
 
 const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, user }) => {
   const role = user?.role || "employe";
+  const isAdmin = role === "super_admin";
+
   const tenantName = user?.tenant?.name || "Ma Boutique";
-  const planLabel = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
   const plan = user?.tenant?.plan || "starter";
+  const planLabel = { starter: "Starter", business: "Business", enterprise: "Enterprise" };
+  const planColor = {
+    enterprise: "bg-purple-100 text-purple-700",
+    business: "bg-blue-100 text-blue-700",
+    starter: "bg-slate-100 text-slate-600",
+  };
 
   const filtered = MENU.filter((item) => item.roles.includes(role));
 
@@ -78,58 +94,70 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, user })
     <>
       {/* Overlay mobile */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} />
       )}
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col h-full transition-transform duration-300 ease-in-out ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-          }`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col h-full transition-transform duration-300 ease-in-out
+          ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+          ${isAdmin ? "bg-slate-900 border-r border-slate-700" : "bg-white border-r border-slate-200"}
+        `}
       >
-        {/* Logo / Tenant */}
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <Store className="w-5 h-5 text-slate-700 flex-shrink-0" />
-              <h1 className="text-base font-black text-slate-900 truncate">
-                {tenantName}
-              </h1>
+        {/* ── Header : différent selon le rôle ── */}
+        {isAdmin ? (
+          /* Backoffice header */
+          <div className="p-5 border-b border-slate-700 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
+                <Shield className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-black text-white">GestStock</h1>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">
+                  Back-office
+                </span>
+              </div>
             </div>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${plan === "enterprise"
-                ? "bg-purple-100 text-purple-700"
-                : plan === "business"
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-slate-100 text-slate-600"
-              }`}>
-              {planLabel[plan]}
-            </span>
+            <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-slate-700 text-slate-400">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        ) : (
+          /* Tenant header */
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <Store className="w-5 h-5 text-slate-700 flex-shrink-0" />
+                <h1 className="text-base font-black text-slate-900 truncate">{tenantName}</h1>
+              </div>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${planColor[plan] || planColor.starter}`}>
+                {planLabel[plan] || plan}
+              </span>
+            </div>
+            <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
 
-        {/* User info */}
-        <div className="px-4 py-3 border-b border-slate-100">
+        {/* ── User info ── */}
+        <div className={`px-4 py-3 border-b ${isAdmin ? "border-slate-700" : "border-slate-100"}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${isAdmin ? "bg-indigo-600 text-white" : "bg-slate-900 text-white"}`}>
               {(user?.name || user?.email || "?")[0].toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate">
+              <p className={`text-sm font-semibold truncate ${isAdmin ? "text-white" : "text-slate-800"}`}>
                 {user?.name || user?.email}
               </p>
-              <p className="text-[10px] text-slate-400 capitalize">{role}</p>
+              <p className={`text-[10px] capitalize ${isAdmin ? "text-indigo-400" : "text-slate-400"}`}>
+                {isAdmin ? "Administrateur" : role}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Nav */}
+        {/* ── Nav ── */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {filtered.map((item) => (
             <NavItem
@@ -137,12 +165,13 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, user })
               item={item}
               isActive={currentPage === item.id}
               onClick={handleNav}
+              isAdmin={isAdmin}
             />
           ))}
         </nav>
 
-        {/* Trial banner */}
-        {user?.tenant?.status === "trial" && (
+        {/* ── Trial banner (tenants uniquement) ── */}
+        {!isAdmin && user?.tenant?.status === "trial" && (
           <div className="mx-3 mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="w-3.5 h-3.5 text-amber-600" />
@@ -160,11 +189,15 @@ const Sidebar = ({ currentPage, onPageChange, onLogout, isOpen, onClose, user })
           </div>
         )}
 
-        {/* Logout */}
-        <div className="p-3 border-t border-slate-100">
+        {/* ── Logout ── */}
+        <div className={`p-3 border-t ${isAdmin ? "border-slate-700" : "border-slate-100"}`}>
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors text-sm font-semibold"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-semibold ${
+              isAdmin
+                ? "text-slate-400 hover:bg-slate-800 hover:text-red-400"
+                : "text-red-500 hover:bg-red-50"
+            }`}
           >
             <X className="w-4 h-4" />
             Déconnexion

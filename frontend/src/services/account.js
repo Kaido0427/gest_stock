@@ -1,5 +1,6 @@
 import api from "./api";
 
+// ─── Compte ───────────────────────────────────────────────────────────────────
 export const getAccount = async () => {
     const { data } = await api.get("/account");
     return data;
@@ -10,7 +11,7 @@ export const updateAccount = async (payload) => {
     return data;
 };
 
-// Boutiques annexes
+// ─── Boutiques annexes ────────────────────────────────────────────────────────
 export const createBoutiqueAnnexe = async (payload) => {
     const { data } = await api.post("/account/boutiques", payload);
     return data;
@@ -26,7 +27,7 @@ export const deleteBoutiqueAnnexe = async (id) => {
     return data;
 };
 
-// Employés
+// ─── Employés ─────────────────────────────────────────────────────────────────
 export const inviterEmploye = async (payload) => {
     const { data } = await api.post("/account/employes", payload);
     return data;
@@ -37,8 +38,19 @@ export const toggleEmploye = async (id) => {
     return data;
 };
 
-// Abonnement
-export const changerPlan = async (plan, paymentRef) => {
-    const { data } = await api.post("/account/plan", { plan, paymentRef });
+// ─── Plans & demandes d'upgrade ──────────────────────────────────────────────
+export const getAvailablePlans = async () => {
+    const { data } = await api.get("/account/plans");
+    return data;
+};
+
+export const requestPlanUpgrade = async (payload) => {
+    // payload: { requestedPlan, message? }
+    const { data } = await api.post("/account/plan-request", payload);
+    return data;
+};
+
+export const getMyPlanRequests = async () => {
+    const { data } = await api.get("/account/plan-requests");
     return data;
 };

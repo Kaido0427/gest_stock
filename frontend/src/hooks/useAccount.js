@@ -7,9 +7,12 @@ import {
     deleteBoutiqueAnnexe,
     inviterEmploye,
     toggleEmploye,
-    changerPlan,
+    getAvailablePlans,
+    requestPlanUpgrade,
+    getMyPlanRequests,
 } from "../services/account";
 
+// ─── Compte ───────────────────────────────────────────────────────────────────
 export const useAccount = () =>
     useQuery({
         queryKey: ["account"],
@@ -25,6 +28,7 @@ export const useUpdateAccount = () => {
     });
 };
 
+// ─── Boutiques annexes ────────────────────────────────────────────────────────
 export const useCreateBoutiqueAnnexe = () => {
     const qc = useQueryClient();
     return useMutation({
@@ -58,6 +62,7 @@ export const useDeleteBoutiqueAnnexe = () => {
     });
 };
 
+// ─── Employés ─────────────────────────────────────────────────────────────────
 export const useInviterEmploye = () => {
     const qc = useQueryClient();
     return useMutation({
@@ -74,13 +79,27 @@ export const useToggleEmploye = () => {
     });
 };
 
-export const useChangerPlan = () => {
+// ─── Plans & demandes d'upgrade ───────────────────────────────────────────────
+export const useAvailablePlans = () =>
+    useQuery({
+        queryKey: ["account", "plans"],
+        queryFn: getAvailablePlans,
+        staleTime: 5 * 60 * 1000, // les plans changent rarement
+    });
+
+export const useRequestPlanUpgrade = () => {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ plan, paymentRef }) => changerPlan(plan, paymentRef),
+        mutationFn: requestPlanUpgrade,
         onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["account", "plan-requests"] });
             qc.invalidateQueries({ queryKey: ["account"] });
-            qc.invalidateQueries({ queryKey: ["me"] });
         },
     });
 };
+
+export const useMyPlanRequests = () =>
+    useQuery({
+        queryKey: ["account", "plan-requests"],
+        queryFn: getMyPlanRequests,
+    });
