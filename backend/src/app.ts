@@ -11,15 +11,27 @@ import type { AppEnv } from "./types/app.type.js";
 
 const app = new Hono<AppEnv>();
 
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:5173"];
+
 app.use(
-    "*",
-    cors({
-        origin: "*",
-        allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allowHeaders: ["Content-Type", "Authorization"],
-    })
+  "*",
+  cors({
+    origin: (origin) => {
+      // En dev : accepter localhost
+      if (!origin) return allowedOrigins[0];
+      if (allowedOrigins.includes(origin)) return origin;
+      return null; // bloqué
+    },
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
 );
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.route("/auth", authRoutes);
 app.route("/account", accountRoutes);
 app.route("/admin", adminRoutes);
@@ -27,9 +39,16 @@ app.route("/boutiques", boutiqueRouter);
 app.route("/produits", produitRoutes);
 app.route("/ventes", venteRoutes);
 
-// ⚠️ Route de seed — à désactiver après création du super admin en production
-// Protégée par SEED_SECRET dans les variables d'environnement
-app.route("/seed", seedRoutes);
+// ─── Seed — disponible uniquement hors production ─────────────────────────────
+// En prod, protégée par SEED_SECRET. Commenter après le premier seed.
+if (process.env.NODE_ENV !== "production") {
+  app.route("/seed", seedRoutes);
+} else {
+  // En prod : route accessible mais protégée par SEED_SECRET uniquement
+  app.route("/seed", seedRoutes);
+  // ↑ On la garde pour pouvoir seeder au premier déploiement.
+  //   Une fois super-admin + plans créés, tu peux commenter cette ligne.
+}
 
 app.get("/", (c) => c.json({ status: "OK", message: "GestStock API v2" }));
 
