@@ -2,13 +2,13 @@ import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     TrendingUp, ShoppingCart, Package, AlertTriangle,
-    RefreshCw, ChevronDown, Store, Clock,
-    ArrowUpRight, ArrowDownRight, BarChart2, Receipt, Search,
+    RefreshCw, ChevronDown, Store, Calendar,
+    ArrowUpRight, ArrowDownRight, BarChart2,
+    Clock, Receipt, Search,
 } from "lucide-react";
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { useMe } from "../hooks/useAuth";
 import { useBoutiques } from "../hooks/useBoutiques";
 import { useStatistiquesVentes, useHistoriqueVentes } from "../hooks/useSales";
 import { useAlertesStock } from "../hooks/useProducts";
@@ -17,6 +17,11 @@ import { Toast, useToast } from "../components/ui/Toast";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) => (typeof n === "number" ? n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) : "0");
 const fmtDate = (d) => new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+const PERIODS = [
+    { key: "jour", label: "Aujourd'hui" },
+    { key: "mois", label: "Ce mois" },
+];
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -110,7 +115,7 @@ function VenteRow({ vente, index }) {
 }
 
 function TopProduits({ data = [] }) {
-    if (!data.length) return <div className="text-center py-8 text-slate-400 text-sm">Aucune donnée</div>;
+    if (!data.length) return <div className="text-center py-8 text-slate-400 text-sm">Aucune donnée disponible</div>;
     const max = Math.max(...data.map((d) => d.quantiteVendue));
     return (
         <div className="space-y-3">
@@ -162,73 +167,50 @@ function AlerteRow({ produit, index }) {
 const Skeleton = ({ className }) => <div className={`bg-slate-200 animate-pulse rounded-xl ${className}`} />;
 
 // ─── Main ──────────────────────────────────────────────────────────────────────
-const DashboardPage = () => {
+const RapportsPage = () => {
     const toast = useToast();
-    const [selectedBoutiqueId, setSelectedBoutiqueId] = useState("");
+    const [periode, setPeriode] = useState("jour");
+    const [selectedBoutique, setSelectedBoutique] = useState("");
     const [searchVente, setSearchVente] = useState("");
 
-    const { data: user } = useMe();
     const { data: boutiquesData } = useBoutiques();
     const boutiques = boutiquesData?.boutiques ?? boutiquesData ?? [];
 
-    // Le manager/employé est filtré sur sa boutique automatiquement
-    const boutiqueId = selectedBoutiqueId || (user?.role !== "owner" ? user?.boutique_id : undefined);
-
     const {
-        data: statsJour,
-        isLoading: loadingStatsJ,
-        refetch: refetchStatsJ,
-    } = useStatistiquesVentes({ periode: "jour", boutique_id: boutiqueId });
-
-    const {
-        data: statsMois,
-        isLoading: loadingStatsM,
-        refetch: refetchStatsM,
-    } = useStatistiquesVentes({ periode: "mois", boutique_id: boutiqueId });
+        data: stats,
+        isLoading: loadingStats,
+        refetch: refetchStats,
+        dataUpdatedAt,
+    } = useStatistiquesVentes({
+        periode,
+        boutique_id: selectedBoutique || undefined,
+    });
 
     const {
         data: historiqueData,
-        isLoading: loadingH,
-        refetch: refetchH,
-    } = useHistoriqueVentes({ limit: 50, boutique_id: boutiqueId });
+        isLoading: loadingHistorique,
+        refetch: refetchHistorique,
+    } = useHistoriqueVentes({
+        limit: 50,
+        boutique_id: selectedBoutique || undefined,
+    });
 
     const {
         data: alertesData,
-        isLoading: loadingA,
-        refetch: refetchA,
-    } = useAlertesStock({ seuil: 10, boutique_id: boutiqueId });
+        isLoading: loadingAlertes,
+        refetch: refetchAlertes,
+    } = useAlertesStock({
+        seuil: 10,
+        boutique_id: selectedBoutique || undefined,
+    });
 
-    const loadingData = loadingStatsJ || loadingStatsM || loadingH || loadingA;
-    const refetchAll = () => { refetchStatsJ(); refetchStatsM(); refetchH(); refetchA(); };
+    const refetchAll = () => { refetchStats(); refetchHistorique(); refetchAlertes(); };
 
     // ─── Extraction des données (le backend wrappe dans .data) ───────────────
-    const globalJour = statsJour?.data?.global ?? {};
-    const globalMois = statsMois?.data?.global ?? {};
-    const topProduits = statsJour?.data?.topProduits ?? [];
+    const statsGlobal = stats?.data?.global ?? {};
+    const topProduits = stats?.data?.topProduits ?? [];
     const ventes = historiqueData?.data?.ventes ?? [];
     const alertes = Array.isArray(alertesData?.data) ? alertesData.data : (alertesData?.data?.produits ?? []);
-
-    const stats = {
-        today: {
-            sales: globalJour.montantTotal ?? 0,
-            transactions: globalJour.totalVentes ?? 0,
-            avgBasket: globalJour.moyennePanier ?? 0,
-        },
-        month: {
-            sales: globalMois.montantTotal ?? 0,
-            transactions: globalMois.totalVentes ?? 0,
-        },
-    };
-
-    const chartData = useMemo(() => {
-        const map = {};
-        ventes.forEach((v) => {
-            const d = new Date(v.date);
-            const key = `${d.getDate()}/${d.getMonth() + 1}`;
-            map[key] = (map[key] || 0) + v.totalAmount;
-        });
-        return Object.entries(map).map(([label, montant]) => ({ label, montant })).slice(-7);
-    }, [ventes]);
 
     const filteredVentes = useMemo(() => {
         if (!searchVente) return ventes;
@@ -237,7 +219,21 @@ const DashboardPage = () => {
         );
     }, [ventes, searchVente]);
 
-    const lastUpdate = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const chartData = useMemo(() => {
+        const map = {};
+        ventes.forEach((v) => {
+            const d = new Date(v.date);
+            const key = periode === "jour"
+                ? `${d.getHours()}h`
+                : `${d.getDate()}/${d.getMonth() + 1}`;
+            map[key] = (map[key] || 0) + v.totalAmount;
+        });
+        return Object.entries(map).map(([label, montant]) => ({ label, montant })).slice(-12);
+    }, [ventes, periode]);
+
+    const lastUpdate = dataUpdatedAt
+        ? new Date(dataUpdatedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+        : null;
 
     return (
         <div className="min-h-screen bg-[#f5f6fa] p-3 sm:p-6">
@@ -247,40 +243,52 @@ const DashboardPage = () => {
                 {/* HEADER */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Tableau de bord</h1>
-                        <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Mis à jour à {lastUpdate}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {user?.role === "owner" && boutiques.length > 1 && (
-                            <div className="relative">
-                                <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                                <select value={selectedBoutiqueId}
-                                    onChange={(e) => setSelectedBoutiqueId(e.target.value)}
-                                    className="appearance-none pl-9 pr-8 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 text-slate-700 font-medium shadow-sm">
-                                    <option value="">Toutes les boutiques</option>
-                                    {boutiques.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                                </select>
-                                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                            </div>
+                        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Rapports</h1>
+                        {lastUpdate && (
+                            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Mis à jour à {lastUpdate}
+                            </p>
                         )}
-                        <button onClick={refetchAll} disabled={loadingData}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* Filtre boutique */}
+                        <div className="relative">
+                            <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            <select value={selectedBoutique} onChange={(e) => setSelectedBoutique(e.target.value)}
+                                className="appearance-none pl-9 pr-8 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 text-slate-700 font-medium shadow-sm">
+                                <option value="">Toutes les boutiques</option>
+                                {boutiques.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        {/* Sélecteur période */}
+                        <div className="flex bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                            {PERIODS.map((p) => (
+                                <button key={p.key} onClick={() => setPeriode(p.key)}
+                                    className={`px-3 py-2.5 text-sm font-semibold transition-colors ${periode === p.key ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-700"
+                                        }`}>
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button onClick={refetchAll}
                             className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-700 shadow-sm transition-colors">
-                            <RefreshCw className={`w-4 h-4 ${loadingData ? "animate-spin" : ""}`} />
+                            <RefreshCw className={`w-4 h-4 ${loadingStats ? "animate-spin" : ""}`} />
                         </button>
                     </div>
                 </div>
 
                 {/* KPIs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {loadingData ? Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-28" />) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {loadingStats ? Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-28" />) : (
                         <>
-                            <KpiCard label="Ventes du jour" value={`${fmt(stats.today.sales)} FCFA`}
-                                sub={`${stats.today.transactions} transaction(s)`} icon={TrendingUp} accent="emerald" delay={0.05} />
-                            <KpiCard label="Ventes du mois" value={`${fmt(stats.month.sales)} FCFA`}
-                                sub={`${stats.month.transactions} transaction(s)`} icon={ShoppingCart} accent="blue" delay={0.1} />
-                            <KpiCard label="Panier moyen" value={`${fmt(stats.today.avgBasket)} FCFA`}
+                            <KpiCard label="Chiffre d'affaires" value={`${fmt(statsGlobal.montantTotal)} FCFA`}
+                                sub={`Moy. ${fmt(statsGlobal.moyennePanier)} FCFA/vente`} icon={TrendingUp} accent="emerald" delay={0.05} />
+                            <KpiCard label="Ventes" value={fmt(statsGlobal.totalVentes)} sub="transactions"
+                                icon={ShoppingCart} accent="blue" delay={0.1} />
+                            <KpiCard label="Panier moyen" value={`${fmt(statsGlobal.moyennePanier)} FCFA`}
                                 icon={BarChart2} accent="amber" delay={0.15} />
                             <KpiCard label="Alertes stock" value={alertes.length} sub="produits à réappro."
                                 icon={AlertTriangle} accent={alertes.length > 0 ? "red" : "emerald"} delay={0.2} />
@@ -292,15 +300,15 @@ const DashboardPage = () => {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
                     <div className="mb-5">
                         <h2 className="font-black text-slate-900">Évolution des ventes</h2>
-                        <p className="text-xs text-slate-400 mt-0.5">7 derniers jours</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{periode === "jour" ? "Par heure" : "Par jour"}</p>
                     </div>
                     {chartData.length === 0 ? (
-                        <div className="h-40 flex items-center justify-center text-slate-400 text-sm">Aucune donnée</div>
+                        <div className="h-40 flex items-center justify-center text-slate-400 text-sm">Aucune donnée pour cette période</div>
                     ) : (
                         <ResponsiveContainer width="100%" height={200}>
                             <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                                 <defs>
-                                    <linearGradient id="colorMontant" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient id="colorMontantR" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
                                         <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                                     </linearGradient>
@@ -311,7 +319,7 @@ const DashboardPage = () => {
                                     tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={36} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Area type="monotone" dataKey="montant" name="Montant" stroke="#6366f1"
-                                    strokeWidth={2.5} fill="url(#colorMontant)" dot={false} activeDot={{ r: 5, fill: "#6366f1" }} />
+                                    strokeWidth={2.5} fill="url(#colorMontantR)" dot={false} activeDot={{ r: 5, fill: "#6366f1" }} />
                             </AreaChart>
                         </ResponsiveContainer>
                     )}
@@ -325,11 +333,11 @@ const DashboardPage = () => {
                                 <BarChart2 className="w-4 h-4 text-indigo-600" />
                             </div>
                             <div>
-                                <h2 className="font-black text-slate-900 text-sm">Top produits</h2>
-                                <p className="text-xs text-slate-400">Aujourd'hui</p>
+                                <h2 className="font-black text-slate-900 text-sm">Top produits vendus</h2>
+                                <p className="text-xs text-slate-400">Par quantité</p>
                             </div>
                         </div>
-                        {loadingData
+                        {loadingStats
                             ? <div className="space-y-3">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>
                             : <TopProduits data={topProduits} />
                         }
@@ -352,7 +360,7 @@ const DashboardPage = () => {
                                 </span>
                             )}
                         </div>
-                        {loadingData ? (
+                        {loadingAlertes ? (
                             <div className="space-y-2">{Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
                         ) : alertes.length === 0 ? (
                             <div className="text-center py-8">
@@ -379,7 +387,7 @@ const DashboardPage = () => {
                             </div>
                             <div>
                                 <h2 className="font-black text-slate-900 text-sm">Historique des ventes</h2>
-                                <p className="text-xs text-slate-400">{filteredVentes.length} transaction(s)</p>
+                                <p className="text-xs text-slate-400">{filteredVentes.length} transaction{filteredVentes.length > 1 ? "s" : ""}</p>
                             </div>
                         </div>
                         <div className="relative">
@@ -389,12 +397,15 @@ const DashboardPage = () => {
                                 className="pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 w-full sm:w-52 placeholder-slate-400 text-slate-700" />
                         </div>
                     </div>
-                    {loadingData ? (
+                    {loadingHistorique ? (
                         <div className="space-y-2">{Array(5).fill(0).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
                     ) : filteredVentes.length === 0 ? (
                         <div className="text-center py-12">
                             <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                             <p className="text-sm font-semibold text-slate-600">Aucune vente</p>
+                            <p className="text-xs text-slate-400">
+                                {searchVente ? "Aucun résultat pour cette recherche" : "Aucune vente enregistrée"}
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
@@ -410,4 +421,4 @@ const DashboardPage = () => {
     );
 };
 
-export default DashboardPage;
+export default RapportsPage;

@@ -169,21 +169,45 @@ export const transfertStockBoutiques = async (c: Context<AppEnv>) => {
 
         if (!produitId || !boutiqueSrcId || !boutiqueDestId || !quantity || quantity <= 0)
             return c.json({ error: "Données invalides" }, 400);
+
         if (boutiqueSrcId === boutiqueDestId)
             return c.json({ error: "Source et destination identiques" }, 400);
 
-        const [produitSrc, produitDest] = await Promise.all([
-            Produit.findOne({ _id: produitId, boutique_id: boutiqueSrcId, tenant_id: tenantId }),
-            Produit.findOne({ boutique_id: boutiqueDestId, tenant_id: tenantId }),
-        ]);
+        // 1. Récupérer le produit de RÉFÉRENCE (celui connu du frontend,
+        //    peut être dans n'importe quelle boutique du tenant)
+        const produitRef = await Produit.findOne({ _id: produitId, tenant_id: tenantId });
+        if (!produitRef)
+            return c.json({ error: "Produit introuvable" }, 404);
 
-        if (!produitSrc) return c.json({ error: "Produit introuvable en source" }, 404);
+        // 2. Chercher ce produit (par nom) dans la boutique SOURCE
+        const produitSrc = await Produit.findOne({
+            name: produitRef.name,
+            boutique_id: boutiqueSrcId,
+            tenant_id: tenantId,
+        });
+        if (!produitSrc)
+            return c.json({
+                error: `Le produit "${produitRef.name}" n'existe pas dans la boutique source`,
+            }, 404);
 
-        const toTransfer = unit && unit !== produitSrc.unit ? convertUnit(quantity, unit, produitSrc.unit) : quantity;
+        // 3. Convertir la quantité dans l'unité de base du produit source
+        const toTransfer = unit && unit !== produitSrc.unit
+            ? convertUnit(quantity, unit, produitSrc.unit)
+            : quantity;
+
         if (produitSrc.stock < toTransfer)
-            return c.json({ error: `Stock insuffisant: ${produitSrc.stock} ${produitSrc.unit} disponible` }, 400);
+            return c.json({
+                error: `Stock insuffisant: ${produitSrc.stock} ${produitSrc.unit} disponible en source`,
+            }, 400);
 
-        // Si le produit n'existe pas en destination, on le crée
+        // 4. Chercher ce produit dans la boutique DESTINATION (par nom)
+        const produitDest = await Produit.findOne({
+            name: produitRef.name,
+            boutique_id: boutiqueDestId,
+            tenant_id: tenantId,
+        });
+
+        // 5. Créer le produit en destination s'il n'existe pas encore
         let destId = produitDest?._id;
         if (!produitDest) {
             const created = await Produit.create({
@@ -199,6 +223,7 @@ export const transfertStockBoutiques = async (c: Context<AppEnv>) => {
             destId = created._id;
         }
 
+        // 6. Appliquer le transfert
         const [srcUpdated, destUpdated] = await Promise.all([
             Produit.findByIdAndUpdate(produitSrc._id, { $inc: { stock: -toTransfer } }, { new: true }).lean(),
             Produit.findByIdAndUpdate(destId, { $inc: { stock: toTransfer } }, { new: true }).lean(),
@@ -206,10 +231,11 @@ export const transfertStockBoutiques = async (c: Context<AppEnv>) => {
 
         return c.json({
             success: true,
-            message: "Transfert effectué",
-            source: { boutique_id: boutiqueSrcId, newStock: srcUpdated!.stock },
+            message: `${toTransfer} ${produitSrc.unit} de "${produitSrc.name}" transféré(s) avec succès`,
+            source:      { boutique_id: boutiqueSrcId,  newStock: srcUpdated!.stock },
             destination: { boutique_id: boutiqueDestId, newStock: destUpdated!.stock },
         });
+
     } catch (error) {
         return c.json({ error: (error as Error).message }, 500);
     }
