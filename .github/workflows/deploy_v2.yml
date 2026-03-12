@@ -92,7 +92,7 @@ jobs:
                   password: ${{ secrets.FTP_PASSWORD_V2 }}
                   local-dir: backend/
                   server-dir: /store-api/
-                  protocol: ftps
+                  protocol: ftp
                   exclude: |
                       **/.git*
                       **/node_modules/**
