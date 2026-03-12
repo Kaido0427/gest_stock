@@ -11,7 +11,7 @@ import ProductModal from "./ProductModal";
 import ApprovisionnementModal from "./ApprovisionnementModal";
 import ProductDetailModal from "./ProductDetailModal";
 import { useProduits, useDeleteProduit } from "../../hooks/useProducts";
-import { getAllBoutiques } from "../../services/boutique";
+import { getBoutiques } from "../../services/boutique";
 import { useQuery } from "@tanstack/react-query";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

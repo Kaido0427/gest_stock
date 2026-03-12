@@ -7,13 +7,17 @@ export const useMe = () =>
     queryFn: getCurrentUser,
     retry: false,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
 export const useLogin = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ email, password }) => login(email, password),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: (data) => {
+      if (data?.error) return; // login échoué, pas d'invalidation
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 };
 
@@ -22,7 +26,10 @@ export const useRegister = () => {
   return useMutation({
     mutationFn: ({ email, password, name, boutiqueName }) =>
       register(email, password, name, boutiqueName),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: (data) => {
+      if (data?.error) return;
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 };
 
@@ -30,6 +37,8 @@ export const useLogout = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
-    onSuccess: () => queryClient.clear(),
+    onSuccess: () => {
+      queryClient.setQueryData(["me"], null);
+    },
   });
 };

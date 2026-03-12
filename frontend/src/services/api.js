@@ -13,16 +13,10 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// Gérer les 401 globalement
+// Ne pas rediriger sur 401 — laisser getCurrentUser retourner null
 api.interceptors.response.use(
     (res) => res,
-    (error) => {
-        if (error.response?.status === 401) {
-            localStorage.removeItem("token");
-            window.location.href = "/";
-        }
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 export default api;

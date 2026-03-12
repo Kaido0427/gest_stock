@@ -5,27 +5,26 @@ import "./index.css";
 import App from "./App.jsx";
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 30_000,
+    defaultOptions: {
+        queries: {
+            retry: false,
+            staleTime: 5 * 60 * 1000,
+            refetchOnWindowFocus: false,
+        },
     },
-  },
 });
 
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
+    <StrictMode>
+        <QueryClientProvider client={queryClient}>
+            <App />
+        </QueryClientProvider>
+    </StrictMode>
 );
 
+// Désinscrire tous les service workers existants
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/service-worker.js")
-      .then((reg) => console.log("Service Worker enregistré", reg))
-      .catch((err) => console.log("Erreur SW", err));
-  });
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((reg) => reg.unregister());
+    });
 }

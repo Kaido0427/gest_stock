@@ -4,7 +4,10 @@ import { getBoutiques, getBoutique } from "../services/boutique";
 export const useBoutiques = () =>
     useQuery({
         queryKey: ["boutiques"],
-        queryFn: getBoutiques,
+        queryFn: async () => {
+            const res = await getBoutiques();
+            return Array.isArray(res) ? res : res.boutiques ?? [];
+        },
         staleTime: 5 * 60 * 1000,
     });
 

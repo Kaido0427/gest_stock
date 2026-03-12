@@ -40,10 +40,30 @@ export const useAddProduit = () => {
     });
 };
 
+// Crée le même produit dans plusieurs boutiques (une requête par boutique)
+export const useAddProduitMultiBoutiques = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ name, description, category, unit, basePrice, boutiques = [] }) => {
+            const results = await Promise.all(
+                boutiques.map((b) =>
+                    addProduit({
+                        name, description, category, unit, basePrice,
+                        boutique_id: b.boutique_id,
+                        stock: b.stock,
+                    })
+                )
+            );
+            return results;
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: ["produits"] }),
+    });
+};
+
 export const useUpdateProduit = () => {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, ...updates }) => updateProduit(id, updates),
+        mutationFn: ({ id, updates }) => updateProduit(id, updates),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["produits"] }),
     });
 };
@@ -59,7 +79,7 @@ export const useDeleteProduit = () => {
 export const useApprovisionner = () => {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: ({ id, ...payload }) => approvisionnerProduit(id, payload),
+        mutationFn: ({ productId, data }) => approvisionnerProduit(productId, data),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["produits"] }),
     });
 };
