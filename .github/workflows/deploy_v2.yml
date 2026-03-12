@@ -1,98 +1,111 @@
 name: 🚀 Deploy GestStock v2 → LWS cPanel
 
 on:
-  push:
-    branches:
-      - store-v2
+    push:
+        branches:
+            - store-v2
 
 jobs:
-  # ───────────────────────────────────────────────────────────────────────────
-  # JOB 1 — Frontend React → digitboutique.cmidigit.com
-  # ───────────────────────────────────────────────────────────────────────────
-  deploy-frontend:
-    name: 🎨 Frontend → digitboutique.cmidigit.com
-    runs-on: ubuntu-latest
+    # ─────────────────────────────────────────────
+    # JOB 1 — Frontend React → digitboutique.cmidigit.com
+    # ─────────────────────────────────────────────
+    deploy-frontend:
+        name: 🎨 Frontend → digitboutique.cmidigit.com
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: store-v2
+        steps:
+            - name: 📥 Checkout
+              uses: actions/checkout@v4
+              with:
+                  ref: store-v2
 
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: yarn.lock
+            - name: ⚙️ Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "yarn"
+                  cache-dependency-path: yarn.lock
 
-      - name: 📦 Install dependencies
-        working-directory: frontend
-        run: yarn install --frozen-lockfile
+            - name: 📦 Install dependencies
+              working-directory: frontend
+              run: yarn install --frozen-lockfile
 
-      - name: 🔨 Build
-        working-directory: frontend
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL_V2 }}
-        run: yarn build
+            - name: 🔨 Build
+              working-directory: frontend
+              env:
+                  VITE_API_URL: ${{ secrets.VITE_API_URL_V2 }}
+              run: yarn build
 
-      - name: 📤 Deploy via rsync
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: -avzr --delete
-          path: frontend/dist/
-          remote_path: /home/c2760523c/public_html/digitboutique/
-          remote_host: ${{ secrets.SSH_HOST_V2 }}
-          remote_user: ${{ secrets.SSH_USER_V2 }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY_V2 }}
+            - name: 📤 Deploy via FTP
+              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+              with:
+                  server: ${{ secrets.FTP_HOST_V2 }}
+                  username: ${{ secrets.FTP_USER_V2 }}
+                  password: ${{ secrets.FTP_PASSWORD_V2 }}
+                  local-dir: frontend/dist/
+                  server-dir: /public_html/digitboutique/
+                  protocol: ftps
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # JOB 2 — Backend Hono → store-api.cmidigit.com
-  # ───────────────────────────────────────────────────────────────────────────
-  deploy-backend:
-    name: 🚀 Backend → store-api.cmidigit.com
-    runs-on: ubuntu-latest
+    # ─────────────────────────────────────────────
+    # JOB 2 — Backend Hono → store-api.cmidigit.com
+    # ─────────────────────────────────────────────
+    deploy-backend:
+        name: 🚀 Backend → store-api.cmidigit.com
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: store-v2
+        steps:
+            - name: 📥 Checkout
+              uses: actions/checkout@v4
+              with:
+                  ref: store-v2
 
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "yarn"
-          cache-dependency-path: yarn.lock
+            - name: ⚙️ Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "yarn"
+                  cache-dependency-path: yarn.lock
 
-      - name: 📦 Install dependencies
-        working-directory: backend
-        run: yarn install --frozen-lockfile
+            - name: 📦 Install dependencies
+              working-directory: backend
+              run: yarn install --frozen-lockfile
 
-      - name: 🔨 Build TypeScript
-        working-directory: backend
-        run: yarn build
+            - name: 🔨 Build TypeScript
+              working-directory: backend
+              run: yarn build
 
-      - name: 📤 Deploy fichiers via rsync
-        uses: burnett01/rsync-deployments@7.0.1
-        with:
-          switches: -avzr --delete --exclude='.env' --exclude='node_modules' --exclude='src'
-          path: backend/
-          remote_path: /home/c2760523c/store-api/
-          remote_host: ${{ secrets.SSH_HOST_V2 }}
-          remote_user: ${{ secrets.SSH_USER_V2 }}
-          remote_key: ${{ secrets.SSH_PRIVATE_KEY_V2 }}
+            - name: 📤 Deploy dist/ via FTP
+              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+              with:
+                  server: ${{ secrets.FTP_HOST_V2 }}
+                  username: ${{ secrets.FTP_USER_V2 }}
+                  password: ${{ secrets.FTP_PASSWORD_V2 }}
+                  local-dir: backend/dist/
+                  server-dir: /store-api/dist/
+                  protocol: ftps
 
-      - name: 🔄 Install prod deps + Restart app
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST_V2 }}
-          username: ${{ secrets.SSH_USER_V2 }}
-          key: ${{ secrets.SSH_PRIVATE_KEY_V2 }}
-          script: |
-            cd /home/c2760523c/store-api
-            yarn install --production --frozen-lockfile
-            mkdir -p tmp
-            touch tmp/restart.txt
-            echo "✅ Backend redémarré"
+            - name: 📤 Deploy package.json via FTP
+              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+              with:
+                  server: ${{ secrets.FTP_HOST_V2 }}
+                  username: ${{ secrets.FTP_USER_V2 }}
+                  password: ${{ secrets.FTP_PASSWORD_V2 }}
+                  local-dir: backend/
+                  server-dir: /store-api/
+                  protocol: ftps
+                  exclude: |
+                      **/.git*
+                      **/node_modules/**
+                      **/src/**
+                      **/.env
+                      **/dist/**
+
+            - name: 🔄 Restart app (Passenger)
+              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+              with:
+                  server: ${{ secrets.FTP_HOST_V2 }}
+                  username: ${{ secrets.FTP_USER_V2 }}
+                  password: ${{ secrets.FTP_PASSWORD_V2 }}
+                  local-dir: backend/tmp/
+                  server-dir: /store-api/tmp/
+                  protocol: ftps
