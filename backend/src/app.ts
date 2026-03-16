@@ -38,6 +38,9 @@ app.route("/admin", adminRoutes);
 app.route("/boutiques", boutiqueRouter);
 app.route("/produits", produitRoutes);
 app.route("/ventes", venteRoutes);
+app.get("/seed/status", (c) => {
+  return c.json({ test: "direct route works" });
+});
 
 // ─── Seed — disponible uniquement hors production ─────────────────────────────
 // En prod, protégée par SEED_SECRET. Commenter après le premier seed.
