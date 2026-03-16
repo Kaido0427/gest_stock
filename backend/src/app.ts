@@ -11,6 +11,12 @@ import type { AppEnv } from "./types/app.type";
 
 const app = new Hono<AppEnv>();
 
+app.use("*", async (c, next) => {
+  console.log(`➡️ ${c.req.method} ${c.req.path}`);
+  await next();
+  console.log(`⬅️ ${c.req.method} ${c.req.path} → ${c.res.status}`);
+});
+
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
@@ -38,9 +44,6 @@ app.route("/admin", adminRoutes);
 app.route("/boutiques", boutiqueRouter);
 app.route("/produits", produitRoutes);
 app.route("/ventes", venteRoutes);
-app.get("/seed/status", (c) => {
-  return c.json({ test: "direct route works" });
-});
 
 // ─── Seed — disponible uniquement hors production ─────────────────────────────
 // En prod, protégée par SEED_SECRET. Commenter après le premier seed.
