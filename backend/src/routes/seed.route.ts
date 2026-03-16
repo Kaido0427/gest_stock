@@ -40,8 +40,17 @@ seedRoutes.post("/plans", async (c) => {
 });
 
 seedRoutes.get("/status", async (c) => {
-    const [superAdminCount, planCount] = await Promise.all([User.countDocuments({ role: "super_admin" }), Plan.countDocuments()]);
-    return c.json({ superAdminExists: superAdminCount > 0, plansSeeded: planCount > 0, planCount });
+    try {
+        console.log("🔍 /seed/status appelé");
+        const superAdminCount = await User.countDocuments({ role: "super_admin" });
+        console.log("👤 superAdminCount:", superAdminCount);
+        const planCount = await Plan.countDocuments();
+        console.log("📋 planCount:", planCount);
+        return c.json({ superAdminExists: superAdminCount > 0, plansSeeded: planCount > 0, planCount });
+    } catch (error) {
+        console.error("❌ Erreur /seed/status:", (error as Error).message);
+        return c.json({ error: (error as Error).message }, 500);
+    }
 });
 
 export { seedRoutes };
