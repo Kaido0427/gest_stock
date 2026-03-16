@@ -52,4 +52,9 @@ if (process.env.NODE_ENV !== "production") {
 
 app.get("/", (c) => c.json({ status: "OK", message: "GestStock API v2" }));
 
+app.onError((err, c) => {
+  console.error("❌ ERREUR ROUTE:", err.message, err.stack);
+  return c.json({ error: err.message, stack: err.stack }, 500);
+});
+
 export default app;
