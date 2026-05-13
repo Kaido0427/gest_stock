@@ -36,7 +36,8 @@ jobs:
           corepack enable
           yarn install --frozen-lockfile
           yarn build
-          yarn install --production --frozen-lockfile
+          # yarn workspaces hoist deps to root — npm creates a local node_modules for deploy
+          npm install --omit=dev --no-package-lock
 
       - name: Configure SSH
         run: |
