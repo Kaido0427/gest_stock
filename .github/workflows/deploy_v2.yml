@@ -1,111 +1,114 @@
-name: 🚀 Deploy GestStock v2 → LWS cPanel
+name: Deploy GestStock v2 → VPS
 
 on:
-    push:
-        branches:
-            - store-v2
+  push:
+    branches: [store-v2]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-gest-stock-v2
+  cancel-in-progress: false
+
+env:
+  REMOTE_HOST: 187.124.34.35
+  REMOTE_USER: cga
 
 jobs:
-    # ─────────────────────────────────────────────
-    # JOB 1 — Frontend React → digitboutique.cmidigit.com
-    # ─────────────────────────────────────────────
-    deploy-frontend:
-        name: 🎨 Frontend → digitboutique.cmidigit.com
-        runs-on: ubuntu-latest
+  # ─── Backend Hono/TypeScript ─────────────────────────────────────────────────
+  deploy-backend:
+    name: Backend → store-api.cmidigit.com
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
 
-        steps:
-            - name: 📥 Checkout
-              uses: actions/checkout@v4
-              with:
-                  ref: store-v2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: store-v2
 
-            - name: ⚙️ Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: "yarn"
-                  cache-dependency-path: yarn.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-            - name: 📦 Install dependencies
-              working-directory: frontend
-              run: yarn install --frozen-lockfile
+      - name: Enable corepack + install deps + build
+        run: |
+          corepack enable
+          yarn install --frozen-lockfile
+          yarn build
 
-            - name: 🔨 Build
-              working-directory: frontend
-              env:
-                  VITE_API_URL: ${{ secrets.VITE_API_URL_V2 }}
-              run: yarn build
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-            - name: 📤 Deploy via FTP
-              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-              with:
-                  server: ${{ secrets.FTP_HOST_V2 }}
-                  username: ${{ secrets.FTP_USER_V2 }}
-                  password: ${{ secrets.FTP_PASSWORD_V2 }}
-                  local-dir: frontend/dist/
-                  server-dir: /public_html/digitboutique/
-                  protocol: ftps
+      - name: Rsync to VPS
+        # .env exclu : géré manuellement sur le VPS
+        run: |
+          rsync -az --delete \
+            --exclude '.env' \
+            --exclude 'node_modules' \
+            --exclude 'src' \
+            --exclude 'tmp' \
+            --exclude '*.md' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "$REMOTE_USER@$REMOTE_HOST:/var/www/gest_stock_backend/"
 
-    # ─────────────────────────────────────────────
-    # JOB 2 — Backend Hono → store-api.cmidigit.com
-    # ─────────────────────────────────────────────
-    deploy-backend:
-        name: 🚀 Backend → store-api.cmidigit.com
-        runs-on: ubuntu-latest
+      - name: Install prod deps + seed .env + restart PM2
+        run: |
+          ssh -i ~/.ssh/deploy_key "$REMOTE_USER@$REMOTE_HOST" bash -s <<'EOF'
+            set -e
+            cd /var/www/gest_stock_backend
+            yarn install --production --frozen-lockfile
+            if [ ! -s .env ] && [ -f .env.example ]; then
+              cp .env.example .env
+              echo "[deploy] .env initialisé depuis .env.example — édite-le sur le VPS"
+            fi
+            if pm2 describe gest-stock-api >/dev/null 2>&1; then
+              pm2 reload gest-stock-api --update-env
+            else
+              pm2 start dist/index.js --name gest-stock-api --time
+            fi
+            pm2 save
+          EOF
 
-        steps:
-            - name: 📥 Checkout
-              uses: actions/checkout@v4
-              with:
-                  ref: store-v2
+  # ─── Frontend React/Vite ────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Frontend → digitboutique.cmidigit.com
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
 
-            - name: ⚙️ Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: "yarn"
-                  cache-dependency-path: yarn.lock
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: store-v2
 
-            - name: 📦 Install dependencies
-              working-directory: backend
-              run: yarn install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-            - name: 🔨 Build TypeScript
-              working-directory: backend
-              run: yarn build
+      - name: Enable corepack + install deps + build
+        env:
+          VITE_API_URL: https://store-api.cmidigit.com
+        run: |
+          corepack enable
+          yarn install --frozen-lockfile
+          yarn build
 
-            - name: 📤 Deploy dist/ via FTP
-              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-              with:
-                  server: ${{ secrets.FTP_HOST_V2 }}
-                  username: ${{ secrets.FTP_USER_V2 }}
-                  password: ${{ secrets.FTP_PASSWORD_V2 }}
-                  local-dir: backend/dist/
-                  server-dir: /store-api/dist/
-                  protocol: ftps
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-            - name: 📤 Deploy package.json via FTP
-              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-              with:
-                  server: ${{ secrets.FTP_HOST_V2 }}
-                  username: ${{ secrets.FTP_USER_V2 }}
-                  password: ${{ secrets.FTP_PASSWORD_V2 }}
-                  local-dir: backend/
-                  server-dir: /store-api/
-                  protocol: ftp
-                  exclude: |
-                      **/.git*
-                      **/node_modules/**
-                      **/src/**
-                      **/.env
-                      **/dist/**
-
-            - name: 🔄 Restart app (Passenger)
-              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-              with:
-                  server: ${{ secrets.FTP_HOST_V2 }}
-                  username: ${{ secrets.FTP_USER_V2 }}
-                  password: ${{ secrets.FTP_PASSWORD_V2 }}
-                  local-dir: backend/tmp/
-                  server-dir: /store-api/tmp/
-                  protocol: ftps
+      - name: Rsync dist/ to VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key "$REMOTE_USER@$REMOTE_HOST" "mkdir -p /var/www/gest_stock_frontend/dist"
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            dist/ "$REMOTE_USER@$REMOTE_HOST:/var/www/gest_stock_frontend/dist/"
