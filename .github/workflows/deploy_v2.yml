@@ -31,11 +31,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enable corepack + install deps + build
+      - name: Enable corepack + install all deps + build + prune to prod
         run: |
           corepack enable
           yarn install --frozen-lockfile
           yarn build
+          yarn install --production --frozen-lockfile
 
       - name: Configure SSH
         run: |
@@ -44,24 +45,22 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-      - name: Rsync to VPS
+      - name: Rsync to VPS (dist + node_modules prod + .env.example)
         # .env exclu : géré manuellement sur le VPS
         run: |
           rsync -az --delete \
             --exclude '.env' \
-            --exclude 'node_modules' \
             --exclude 'src' \
             --exclude 'tmp' \
             --exclude '*.md' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             ./ "$REMOTE_USER@$REMOTE_HOST:/var/www/gest_stock_backend/"
 
-      - name: Install prod deps + seed .env + restart PM2
+      - name: Seed .env + restart PM2
         run: |
           ssh -i ~/.ssh/deploy_key "$REMOTE_USER@$REMOTE_HOST" bash -s <<'EOF'
             set -e
             cd /var/www/gest_stock_backend
-            yarn install --production --frozen-lockfile
             if [ ! -s .env ] && [ -f .env.example ]; then
               cp .env.example .env
               echo "[deploy] .env initialisé depuis .env.example — édite-le sur le VPS"
