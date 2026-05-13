@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { ArrowUp } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import Footer from "./Footer";
 
 const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -38,6 +39,8 @@ const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
                 >
                     {children}
                 </main>
+
+                <Footer />
             </div>
 
             {showScrollTop && (

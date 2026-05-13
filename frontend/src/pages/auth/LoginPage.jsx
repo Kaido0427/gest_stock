@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, LogIn, Store } from "lucide-react";
 import { useLogin } from "../../hooks/useAuth";
+import Footer from "../../components/layout/Footer";
 
 const LoginPage = ({ onSwitchToRegister }) => {
     const [email, setEmail] = useState("");
@@ -26,7 +27,8 @@ const LoginPage = ({ onSwitchToRegister }) => {
     const inputCls = "w-full py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-400 text-slate-700 placeholder-slate-400 text-sm transition-all disabled:opacity-50";
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-4">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -97,6 +99,8 @@ const LoginPage = ({ onSwitchToRegister }) => {
                     )}
                 </div>
             </motion.div>
+        </div>
+        <Footer />
         </div>
     );
 };
