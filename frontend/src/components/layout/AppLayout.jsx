@@ -24,10 +24,8 @@ const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
     const blockApp = isExpired && currentPage !== "compte";
 
     const handleRenew = () => {
+        window.location.hash = "abonnement";
         onPageChange("compte");
-        setTimeout(() => {
-            document.getElementById("abonnement")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 200);
     };
 
     return (

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Store, Users, CreditCard, Plus, Trash2,
@@ -148,6 +148,23 @@ const ComptePage = () => {
     const [showEmployeForm, setShowEmployeForm] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [confirmDeleteBoutique, setConfirmDeleteBoutique] = useState(null);
+
+    // Ancrage : si on arrive via "Renouveler" (hash #abonnement), on scrolle sur la grille
+    // des plans une fois qu'elle est rendue (réessais le temps du chargement async).
+    useEffect(() => {
+        if (window.location.hash !== "#abonnement") return;
+        let tries = 0;
+        const tryScroll = () => {
+            const el = document.getElementById("abonnement");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                window.history.replaceState(null, "", window.location.pathname + window.location.search);
+            } else if (tries++ < 20) {
+                setTimeout(tryScroll, 150);
+            }
+        };
+        tryScroll();
+    }, []);
 
     if (isLoading) return (
         <div className="flex items-center justify-center h-64">
