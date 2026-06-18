@@ -54,6 +54,7 @@ function Section({ title, icon: Icon, children, badge }) {
 // ─── Modal de demande d'upgrade ───────────────────────────────────────────────
 const PlanRequestModal = ({ plan, currentPlan, onClose, onConfirm, isPending }) => {
     const [message, setMessage] = useState("");
+    const isRenewal = plan?.name === currentPlan;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -63,18 +64,24 @@ const PlanRequestModal = ({ plan, currentPlan, onClose, onConfirm, isPending }) 
                 className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full z-10"
             >
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-black text-slate-900">Demander le plan {plan?.label}</h3>
+                    <h3 className="font-black text-slate-900">{isRenewal ? "Renouveler le plan" : "Demander le plan"} {plan?.label}</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-4">
-                    <p className="text-xs text-slate-500 mb-1">Passage de</p>
+                    <p className="text-xs text-slate-500 mb-1">{isRenewal ? "Renouvellement de" : "Passage de"}</p>
                     <p className="text-sm font-bold text-slate-700">
-                        <span className="capitalize">{currentPlan}</span>
-                        <span className="text-slate-400 mx-2">→</span>
-                        <span className="text-indigo-600">{plan?.label}</span>
+                        {isRenewal ? (
+                            <span className="text-indigo-600">{plan?.label}</span>
+                        ) : (
+                            <>
+                                <span className="capitalize">{currentPlan}</span>
+                                <span className="text-slate-400 mx-2">→</span>
+                                <span className="text-indigo-600">{plan?.label}</span>
+                            </>
+                        )}
                     </p>
                     <p className="text-sm font-black text-slate-900 mt-1">
                         {plan?.price?.toLocaleString()} {plan?.currency || "XOF"} / mois
@@ -98,7 +105,7 @@ const PlanRequestModal = ({ plan, currentPlan, onClose, onConfirm, isPending }) 
                     <div className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-700">
-                            Votre demande sera envoyée à l'administrateur qui vous contactera pour finaliser le paiement et activer votre nouveau plan.
+                            Votre demande sera envoyée à l'administrateur qui vous contactera pour finaliser le paiement et activer votre abonnement.
                         </p>
                     </div>
                 </div>
@@ -352,7 +359,6 @@ const ComptePage = () => {
                 </Section>
 
                 {/* ── Abonnement ── */}
-                <div id="abonnement" className="scroll-mt-6" />
                 <Section
                     title="Abonnement"
                     icon={CreditCard}
@@ -417,6 +423,7 @@ const ComptePage = () => {
                     )}
 
                     {/* Grille des plans (depuis la DB) */}
+                    <div id="abonnement" className="scroll-mt-6" />
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {plans.map((plan) => {
                             const isCurrent = currentPlan === plan.name;
@@ -461,14 +468,20 @@ const ComptePage = () => {
                                         ))}
                                     </ul>
 
-                                    {isCurrent ? (
-                                        <div className="w-full py-2 text-center text-xs font-bold text-slate-400">
-                                            Plan actuel
-                                        </div>
-                                    ) : pendingRequest ? (
+                                    {pendingRequest ? (
                                         <div className="w-full py-2 text-center text-xs font-bold text-amber-600 bg-amber-50 rounded-xl">
                                             Demande en attente
                                         </div>
+                                    ) : isCurrent ? (
+                                        <>
+                                            <p className="text-[11px] text-slate-300 text-center mb-1.5">Votre plan actuel</p>
+                                            <button
+                                                onClick={() => setSelectedPlan(plan)}
+                                                className="w-full py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-bold transition-colors"
+                                            >
+                                                Renouveler ce plan
+                                            </button>
+                                        </>
                                     ) : (
                                         <button
                                             onClick={() => setSelectedPlan(plan)}

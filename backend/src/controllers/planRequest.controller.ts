@@ -32,7 +32,10 @@ export const requestPlanUpgrade = async (c: Context<AppEnv>) => {
         const planDoc = await Plan.findOne({ name: requestedPlan, isActive: true }).lean();
         if (!planDoc) return c.json({ error: `Plan "${requestedPlan}" non disponible` }, 404);
 
-        if (tenant.plan === requestedPlan) {
+        // Même plan = renouvellement : autorisé seulement si l'abonnement est expiré/suspendu.
+        // Sinon (actif/essai en cours), inutile de redemander le plan courant.
+        const isRenewal = tenant.status === "expired" || tenant.status === "suspended";
+        if (tenant.plan === requestedPlan && !isRenewal) {
             return c.json({ error: "Vous êtes déjà sur ce plan" }, 400);
         }
 
