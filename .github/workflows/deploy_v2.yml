@@ -31,13 +31,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enable corepack + install all deps + build + prune to prod
+      - name: Enable corepack + install all deps + build
         run: |
           corepack enable
           yarn install --frozen-lockfile
           yarn build
-          # yarn workspaces hoist deps to root — npm creates a local node_modules for deploy
-          npm install --omit=dev --no-package-lock
+          # node_modules n'est PAS transféré : il est installé sur le serveur (étape déploiement)
+          # pour éviter les corruptions de rsync sur lien instable.
 
       - name: Configure SSH
         run: |
@@ -46,11 +46,12 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p 22 -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Rsync to VPS (dist + node_modules prod + .env.example)
-        # .env exclu : géré manuellement sur le VPS
+      - name: Rsync to VPS (code + dist + .env.example, sans node_modules)
+        # .env et node_modules exclus : .env géré sur le VPS, node_modules (re)installé sur le VPS
         run: |
           rsync -az --delete \
             --exclude '.env' \
+            --exclude 'node_modules' \
             --exclude 'src' \
             --exclude 'tmp' \
             --exclude '*.md' \
@@ -66,6 +67,11 @@ jobs:
               cp .env.example .env
               echo "[deploy] .env initialisé depuis .env.example — édite-le sur le VPS"
             fi
+            # Install des deps de prod SUR le serveur (fiable, plus de corruption rsync)
+            npm install --omit=dev --no-package-lock
+            # Garde-fou : on ne (re)démarre pas si les modules clés ne se chargent pas
+            node -e "require('dotenv/config'); require('hono'); require('mongoose');" \
+              || { echo "[deploy] ERREUR: node_modules incomplet, abandon"; exit 1; }
             if pm2 describe gest-stock-api >/dev/null 2>&1; then
               pm2 reload gest-stock-api --update-env
             else
