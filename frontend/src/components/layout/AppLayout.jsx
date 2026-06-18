@@ -3,6 +3,7 @@ import { ArrowUp } from "lucide-react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import Footer from "./Footer";
+import SubscriptionExpiredModal from "../SubscriptionExpiredModal";
 
 const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -13,6 +14,20 @@ const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
         if (scrollRef.current) {
             setShowScrollTop(scrollRef.current.scrollTop > 300);
         }
+    };
+
+    // Abonnement expiré (ou essai échu) → on bloque tout sauf la page Compte (pour renouveler)
+    const tenant = user?.tenant;
+    const trialExpired =
+        tenant?.status === "trial" && tenant?.trialEndsAt && new Date(tenant.trialEndsAt) < new Date();
+    const isExpired = tenant?.status === "expired" || trialExpired;
+    const blockApp = isExpired && currentPage !== "compte";
+
+    const handleRenew = () => {
+        onPageChange("compte");
+        setTimeout(() => {
+            document.getElementById("abonnement")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 200);
     };
 
     return (
@@ -26,7 +41,7 @@ const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
                 user={user}
             />
 
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden relative">
                 <TopBar
                     onMenuOpen={() => setSidebarOpen(true)}
                     tenantName={user?.tenant?.name}
@@ -41,6 +56,8 @@ const AppLayout = ({ user, onLogout, currentPage, onPageChange, children }) => {
                 </main>
 
                 <Footer />
+
+                {blockApp && <SubscriptionExpiredModal onRenew={handleRenew} />}
             </div>
 
             {showScrollTop && (

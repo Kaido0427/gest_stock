@@ -352,6 +352,7 @@ const ComptePage = () => {
                 </Section>
 
                 {/* ── Abonnement ── */}
+                <div id="abonnement" className="scroll-mt-6" />
                 <Section
                     title="Abonnement"
                     icon={CreditCard}
