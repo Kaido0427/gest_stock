@@ -20,6 +20,8 @@
   <style>
     body{font-family:'Inter',sans-serif}
     .gridmask{background-image:linear-gradient(rgba(255,255,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.07) 1px,transparent 1px);background-size:34px 34px}
+    @keyframes authfloat{0%{transform:translateY(0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(-110vh);opacity:0}}
+    .animate-authfloat{animation:authfloat linear infinite}
   </style>
 </head>
 <body class="bg-slate-100">
@@ -28,8 +30,9 @@
 
     <!-- ===== GAUCHE : structure maquette 1 + arrière-plan maquette 2 (sombre) ===== -->
     <div class="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-slate-900 text-white">
-      <div class="absolute inset-0 bg-cover bg-center" style="background-image:url('public/cmidigit_bg.png')"></div>
+      <div class="absolute inset-0 bg-cover bg-center blur-sm scale-110" style="background-image:url('public/cmidigit_bg.png')"></div>
       <div class="absolute inset-0 bg-gradient-to-r from-primary-900/80 via-primary-900/40 to-transparent"></div>
+      <div class="absolute inset-0 pointer-events-none opacity-25" id="bubbles"></div>
 
       <div class="relative z-10 flex flex-col justify-between w-full p-14 xl:p-20">
         <div class="inline-flex items-center gap-3 bg-white rounded-2xl px-4 py-2 shadow-lg w-max">
@@ -68,7 +71,7 @@
     </div>
 
     <!-- ===== DROITE : formulaire maquette 1 (sans le CTA "Créer un compte") ===== -->
-    <div class="w-full lg:w-[45%] relative flex items-center justify-center p-6 sm:p-12 bg-white">
+    <div class="w-full lg:w-[45%] relative flex items-center justify-center p-6 sm:p-12 bg-slate-50">
       <div class="w-full max-w-md animate-fade">
         <div class="lg:hidden flex justify-center mb-8"><img src="public/logo_cmidiogit.jpeg" class="h-16 w-auto" alt="CMI" /></div>
         <h2 class="text-3xl font-extrabold text-slate-900">Bienvenue</h2>
@@ -114,6 +117,9 @@
   <script>
     const t=document.getElementById('toggle'),p=document.getElementById('pwd');
     t.addEventListener('click',()=>{p.type=p.type==='password'?'text':'password';});
+    // Bulles flottantes
+    const c=document.getElementById('bubbles');
+    for(let i=0;i<16;i++){const s=document.createElement('span');s.className='absolute w-2 h-2 bg-white rounded-full animate-authfloat';s.style.left=Math.random()*100+'%';s.style.bottom='-10px';s.style.animationDelay=Math.random()*6+'s';s.style.animationDuration=(8+Math.random()*10)+'s';c.appendChild(s);}
   </script>
 </body>
 </html>
