@@ -10,6 +10,8 @@ export interface IUser extends Document {
   tenant_id?: Types.ObjectId;
   boutique_id?: Types.ObjectId; // boutique assignée (employe/manager)
   isActive: boolean;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +29,8 @@ const UserSchema = new Schema<IUser>(
     tenant_id: { type: Schema.Types.ObjectId, ref: "Tenant", index: true },
     boutique_id: { type: Schema.Types.ObjectId, ref: "Boutique" },
     isActive: { type: Boolean, default: true },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
   },
   { timestamps: true }
 );

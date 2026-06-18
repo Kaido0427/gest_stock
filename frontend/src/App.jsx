@@ -3,6 +3,8 @@ import { useMe, useLogout } from "./hooks/useAuth";
 import AppLayout from "./components/layout/AppLayout";
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProduitsPage from "./pages/ProductPage";
 import VentesPage from "./pages/VentesPage";
@@ -17,6 +19,13 @@ const PAGES = {
   admin: AdminLayout,
 };
 
+// Token de réinitialisation présent dans l'URL (lien reçu par email)
+const getResetToken = () => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  return token && window.location.pathname.includes("reset-password") ? token : null;
+};
+
 const App = () => {
   const { data: user, isLoading } = useMe();
   const { mutate: logout } = useLogout();
@@ -25,6 +34,17 @@ const App = () => {
   const getDefaultPage = (u) => (u?.role === "super_admin" ? "admin" : "dashboard");
   const [currentPage, setCurrentPage] = useState(null);
   const [authView, setAuthView] = useState("login");
+  const [resetToken, setResetToken] = useState(getResetToken);
+
+  // Page de réinitialisation : prioritaire si l'URL contient un token (même connecté)
+  if (resetToken) {
+    const finishReset = () => {
+      window.history.replaceState({}, "", "/");
+      setResetToken(null);
+      setAuthView("login");
+    };
+    return <ResetPasswordPage token={resetToken} onDone={finishReset} />;
+  }
 
   if (isLoading) {
     return (
@@ -35,10 +55,17 @@ const App = () => {
   }
 
   if (!user) {
-    return authView === "login" ? (
-      <LoginPage onSwitchToRegister={() => setAuthView("register")} />
-    ) : (
-      <RegisterPage onSwitchToLogin={() => setAuthView("login")} />
+    if (authView === "register") {
+      return <RegisterPage onSwitchToLogin={() => setAuthView("login")} />;
+    }
+    if (authView === "forgot") {
+      return <ForgotPasswordPage onBackToLogin={() => setAuthView("login")} />;
+    }
+    return (
+      <LoginPage
+        onSwitchToRegister={() => setAuthView("register")}
+        onSwitchToForgot={() => setAuthView("forgot")}
+      />
     );
   }
 

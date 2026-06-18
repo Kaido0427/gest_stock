@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Mail, Lock, Eye, EyeOff, LogIn, Store } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useLogin } from "../../hooks/useAuth";
-import Footer from "../../components/layout/Footer";
+import AuthShell from "../../components/auth/AuthShell";
 
-const LoginPage = ({ onSwitchToRegister }) => {
+const LoginPage = ({ onSwitchToRegister, onSwitchToForgot }) => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -24,84 +24,116 @@ const LoginPage = ({ onSwitchToRegister }) => {
         );
     };
 
-    const inputCls = "w-full py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-400 text-slate-700 placeholder-slate-400 text-sm transition-all disabled:opacity-50";
-
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col">
-        <div className="flex-1 flex items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="w-full max-w-md"
-            >
-                <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 sm:p-10">
-                    <div className="text-center mb-8">
-                        <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                            <Store className="w-7 h-7 text-white" />
-                        </div>
-                        <h1 className="text-2xl font-black text-slate-900">Connexion</h1>
-                        <p className="text-sm text-slate-500 mt-1">Accédez à votre espace de gestion</p>
+        <AuthShell>
+            <h2 className="text-3xl font-extrabold text-slate-900">Bienvenue</h2>
+            <p className="mt-2 text-slate-500">Connectez-vous à votre espace de gestion.</p>
+
+            {error && (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-6 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium"
+                >
+                    {error}
+                </motion.div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+                {/* Email */}
+                <div>
+                    <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
+                        Adresse email
+                    </label>
+                    <div className="group flex border-2 border-slate-200 rounded-xl overflow-hidden transition-all focus-within:ring-2 focus-within:ring-primary-200 focus-within:border-primary-500">
+                        <span className="w-12 grid place-items-center bg-primary-600 text-white">
+                            <Mail className="w-5 h-5" />
+                        </span>
+                        <input
+                            id="email"
+                            type="email"
+                            placeholder="vous@exemple.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            disabled={isPending}
+                            className="flex-1 px-4 py-3 outline-none text-slate-700 placeholder-slate-400 disabled:opacity-50"
+                        />
                     </div>
-
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium"
-                        >
-                            {error}
-                        </motion.div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Email</label>
-                            <div className="relative">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                <input type="email" placeholder="vous@exemple.com" value={email}
-                                    onChange={(e) => setEmail(e.target.value)} required disabled={isPending}
-                                    className={`${inputCls} pl-11 pr-4`} />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Mot de passe</label>
-                            <div className="relative">
-                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                <input type={showPassword ? "text" : "password"} placeholder="••••••••"
-                                    value={password} onChange={(e) => setPassword(e.target.value)}
-                                    required disabled={isPending} className={`${inputCls} pl-11 pr-12`} />
-                                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" tabIndex="-1">
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
-                        </div>
-
-                        <button type="submit" disabled={isPending}
-                            className="w-full mt-2 bg-slate-900 hover:bg-slate-700 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50">
-                            {isPending ? (
-                                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Connexion...</>
-                            ) : (
-                                <><LogIn className="w-5 h-5" />Se connecter</>
-                            )}
-                        </button>
-                    </form>
-
-                    {onSwitchToRegister && (
-                        <p className="text-sm text-slate-500 text-center mt-6">
-                            Pas encore de compte ?{" "}
-                            <button onClick={onSwitchToRegister} className="font-bold text-slate-900 hover:underline">
-                                Créer un compte
-                            </button>
-                        </p>
-                    )}
                 </div>
-            </motion.div>
-        </div>
-        <Footer />
-        </div>
+
+                {/* Mot de passe */}
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <label htmlFor="password" className="text-sm font-semibold text-slate-700">
+                            Mot de passe
+                        </label>
+                        <button
+                            type="button"
+                            onClick={onSwitchToForgot}
+                            className="text-xs font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+                        >
+                            Mot de passe oublié ?
+                        </button>
+                    </div>
+                    <div className="group flex border-2 border-slate-200 rounded-xl overflow-hidden transition-all focus-within:ring-2 focus-within:ring-primary-200 focus-within:border-primary-500">
+                        <span className="w-12 grid place-items-center bg-primary-600 text-white">
+                            <Lock className="w-5 h-5" />
+                        </span>
+                        <input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="••••••••"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            disabled={isPending}
+                            className="flex-1 px-4 py-3 outline-none text-slate-700 placeholder-slate-400 disabled:opacity-50"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((s) => !s)}
+                            tabIndex={-1}
+                            aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                            className="px-3 text-slate-400 hover:text-slate-600"
+                        >
+                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Bouton */}
+                <button
+                    type="submit"
+                    disabled={isPending}
+                    className="w-full bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                    {isPending ? (
+                        <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Connexion...
+                        </>
+                    ) : (
+                        <>
+                            Se connecter
+                            <ArrowRight className="w-5 h-5" />
+                        </>
+                    )}
+                </button>
+            </form>
+
+            {onSwitchToRegister && (
+                <p className="text-sm text-slate-500 text-center mt-6">
+                    Pas encore de compte ?{" "}
+                    <button
+                        onClick={onSwitchToRegister}
+                        className="font-bold text-primary-600 hover:text-primary-700 hover:underline"
+                    >
+                        Créer un compte
+                    </button>
+                </p>
+            )}
+        </AuthShell>
     );
 };
 
