@@ -10,7 +10,7 @@ import { Toaster } from "react-hot-toast";
 import ProductModal from "./ProductModal";
 import ApprovisionnementModal from "./ApprovisionnementModal";
 import ProductDetailModal from "./ProductDetailModal";
-import { useProduits, useDeleteProduit } from "../../hooks/useProducts";
+import { useProduits, useDeleteProduit, useProduitsStats } from "../../hooks/useProducts";
 import { getAllBoutiques } from "../../services/boutique";
 import { useQuery } from "@tanstack/react-query";
 
@@ -238,9 +238,17 @@ function Pagination({ pagination, page, onPageChange }) {
 const ProductsPage = () => {
   const [page, setPage] = useState(1);
   const [selectedBoutique, setSelectedBoutique] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState("name");
+  const [searchInput, setSearchInput] = useState(""); // ce que l'utilisateur tape
+  const [searchTerm, setSearchTerm] = useState("");    // valeur réellement envoyée à l'API (débouncée)
+  const [sortBy, setSortBy] = useState("recent");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+
+  // ✅ DEBOUNCE : on n'interroge l'API que 350 ms après la dernière frappe
+  //    → plus de requête à chaque lettre, plus de clignotement
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchInput), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // ✅ RÉINITIALISER LA PAGE À 1 QUAND LA RECHERCHE CHANGE
   useEffect(() => {
@@ -253,6 +261,7 @@ const ProductsPage = () => {
     limit: 50,
     boutique_id: selectedBoutique || undefined,
     search: searchTerm,   // ← maintenant la recherche est faite côté serveur
+    sort: sortBy,         // ← tri fait côté serveur (cohérent avec la pagination)
   });
 
   const products = data?.produits ?? [];
@@ -287,25 +296,24 @@ const ProductsPage = () => {
     deleteMutation.mutate(id, { onSettled: () => setDeletingId(null) });
   }, [deleteMutation]);
 
-  // ✅ TRI CÔTÉ CLIENT (le serveur ne trie pas encore, on le fait ici)
-  const sortedProducts = useMemo(() => {
-    return [...products].sort((a, b) => {
-      if (sortBy === "stock") return (a.stock || 0) - (b.stock || 0);
-      if (sortBy === "price") return (a.basePrice || 0) - (b.basePrice || 0);
-      return a.name.localeCompare(b.name, "fr");
-    });
-  }, [products, sortBy]);
+  // ✅ Le tri est maintenant fait côté serveur (cohérent avec la pagination).
+  //    On garde l'ordre renvoyé par l'API tel quel.
+  const sortedProducts = products;
 
-  // ✅ STATS (calculées sur la page courante, approximation)
+  // ✅ STATS GLOBALES (calculées côté serveur sur tout le filtre, pas la page affichée)
+  const { data: statsData } = useProduitsStats({
+    boutique_id: selectedBoutique || undefined,
+    search: searchTerm,
+  });
   const stats = useMemo(() => ({
-    total: pagination?.total ?? products.length,
-    stockTotal: products.reduce((s, p) => s + (p.stock || 0), 0),
-    lowStock: products.filter((p) => p.stock > 0 && p.stock < 10).length,
-    outOfStock: products.filter((p) => p.stock === 0).length,
-  }), [products, pagination?.total]);
+    total: statsData?.total ?? pagination?.total ?? products.length,
+    stockTotal: statsData?.stockTotal ?? products.reduce((s, p) => s + (p.stock || 0), 0),
+    lowStock: statsData?.lowStock ?? products.filter((p) => p.stock > 0 && p.stock < 10).length,
+    outOfStock: statsData?.outOfStock ?? products.filter((p) => p.stock === 0).length,
+  }), [statsData, products, pagination?.total]);
 
-  const hasFilters = searchTerm || selectedBoutique;
-  const clearFilters = useCallback(() => { setSearchTerm(""); setSelectedBoutique(""); setPage(1); }, []);
+  const hasFilters = searchInput || selectedBoutique;
+  const clearFilters = useCallback(() => { setSearchInput(""); setSearchTerm(""); setSelectedBoutique(""); setPage(1); }, []);
 
   const handleBoutiqueChange = (id) => { setSelectedBoutique(id); setPage(1); };
 
@@ -364,12 +372,12 @@ const ProductsPage = () => {
                 <input
                   type="text"
                   placeholder="Rechercher…"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-400 transition-all placeholder-slate-400 text-slate-700"
                 />
-                {searchTerm && (
-                  <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                {searchInput && (
+                  <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -389,6 +397,7 @@ const ProductsPage = () => {
               <div className="relative hidden sm:block">
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600 font-medium focus:outline-none focus:ring-2 focus:ring-slate-900/20 cursor-pointer">
+                  <option value="recent">Récents</option>
                   <option value="name">A → Z</option>
                   <option value="stock">Stock ↑</option>
                   <option value="price">Prix ↑</option>
@@ -431,6 +440,7 @@ const ProductsPage = () => {
                       <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
                         className="appearance-none w-full pl-10 pr-8 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 text-slate-700 cursor-pointer">
+                        <option value="recent">Trier : Récents</option>
                         <option value="name">Trier : A → Z</option>
                         <option value="stock">Trier : Stock ↑</option>
                         <option value="price">Trier : Prix ↑</option>

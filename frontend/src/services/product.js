@@ -6,9 +6,14 @@ const API_URL = import.meta.env.VITE_API_URL
 // ─── helpers ──────────────────────────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
   try {
+    const token = localStorage.getItem("token");
     const res = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
       ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
     });
     const data = await res.json();
     if (!res.ok) return { error: data.error || `Erreur HTTP ${res.status}` };
@@ -35,8 +40,18 @@ export async function getProduits(params = {}) {
   if (params.limit)      qs.set("limit", params.limit);
   if (params.boutique_id) qs.set("boutique_id", params.boutique_id);
   if (params.search)    qs.set("search", params.search);
+  if (params.sort)      qs.set("sort", params.sort);
   const query = qs.toString() ? `?${qs}` : "";
   return apiFetch(`${API_URL}${query}`);
+}
+
+// ✅ Stats globales (calculées côté serveur sur tout le filtre, pas la page courante)
+export async function getProduitsStats(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.boutique_id) qs.set("boutique_id", params.boutique_id);
+  if (params.search)      qs.set("search", params.search);
+  const query = qs.toString() ? `?${qs}` : "";
+  return apiFetch(`${API_URL}/stats${query}`);
 }
 
 export const getProduit = (id) => apiFetch(`${API_URL}/${id}`);

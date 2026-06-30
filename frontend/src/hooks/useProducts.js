@@ -1,8 +1,9 @@
 // hooks/useProducts.js
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
     getProduits,
+    getProduitsStats,
     addProduit,
     addProduitMultiBoutiques,
     updateProduit,
@@ -37,7 +38,24 @@ export function useProduits(params = {}) {
         // ✅ FIX : staleTime plus long → moins de refetch inutiles
         staleTime: 2 * 60 * 1000,  // 2 minutes (était 30s)
         gcTime: 5 * 60 * 1000,   // garde en cache 5min après unmount
+        // ✅ FIX : garde l'ancienne liste affichée pendant la recherche/pagination
+        //          → la liste ne se vide plus (plus de clignotement) entre 2 frappes
+        placeholderData: keepPreviousData,
         select: (data) => data,     // accès à data.produits + data.pagination
+    });
+}
+
+// ✅ Stats globales (total, stock total, faible, épuisé) sur tout le filtre courant
+export function useProduitsStats(params = {}) {
+    return useQuery({
+        queryKey: ["produits", "stats", params],
+        queryFn: async () => {
+            const res = await getProduitsStats(params);
+            if (res.error) throw new Error(res.error);
+            return res;
+        },
+        staleTime: 60 * 1000,
+        placeholderData: keepPreviousData,
     });
 }
 

@@ -25,12 +25,18 @@ const convertUnit = (quantity: number, fromUnit: string, toUnit: string): number
     if (weightToKg[fromUnit] && weightToKg[toUnit]) {
         return (quantity * weightToKg[fromUnit]) / weightToKg[toUnit];
     }
-    return quantity;
+    // ✅ Unités de familles différentes (ex: vendre des "kg" d'un produit en "pièce")
+    //    → on refuse au lieu de déduire une quantité fausse silencieusement.
+    throw new Error(`Conversion impossible entre "${fromUnit}" et "${toUnit}"`);
 };
 
 const calculatePrice = (basePrice: number, baseUnit: string, soldUnit: string, quantity: number): number => {
     return basePrice * convertUnit(quantity, soldUnit, baseUnit);
 };
+
+// ✅ Échappe les caractères spéciaux regex pour que la recherche
+//    ne plante pas quand le nom contient ( ) [ ] * + \ etc. (ex: "Lait (1L)")
+const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ─── ROUTE : Créer un produit dans plusieurs boutiques ──────────────────────
 export const createProduitMultiBoutiques = async (c: Context) => {
@@ -47,13 +53,25 @@ export const createProduitMultiBoutiques = async (c: Context) => {
         if (produitData.basePrice <= 0) {
             return c.json({ error: "Le prix de base doit être supérieur à 0" }, 400);
         }
+        if (!Object.values(UnitType).includes(produitData.unit)) {
+            return c.json({ error: "L'unité doit être valide" }, 400);
+        }
+
+        // ✅ Valide chaque boutique AVANT insertion (sinon une boutique au mauvais
+        //    format faisait échouer silencieusement sa ligne → "produit pas dans la boutique")
+        const invalides = boutiques.filter(
+            (b: any) => !b?.boutique_id || !mongoose.Types.ObjectId.isValid(b.boutique_id)
+        );
+        if (invalides.length > 0) {
+            return c.json({ error: "Une ou plusieurs boutiques sélectionnées sont invalides" }, 400);
+        }
 
         // ✅ FIX #2 : insertMany au lieu de N create() séparés → 1 seul aller-retour DB
         const docs = boutiques.map((b: any) => ({
             name: produitData.name,
             description: produitData.description,
             category: produitData.category,
-            stock: b.stock || 0,
+            stock: Math.max(0, Number(b.stock) || 0),
             unit: produitData.unit,
             basePrice: produitData.basePrice,
             boutique_id: b.boutique_id,
@@ -62,9 +80,14 @@ export const createProduitMultiBoutiques = async (c: Context) => {
 
         const inserted = await Produit.insertMany(docs, { ordered: false });
 
+        // ✅ Avertit si toutes les boutiques demandées n'ont pas été créées
+        const partial = inserted.length < boutiques.length;
         return c.json({
             success: true,
-            message: `Produit créé dans ${inserted.length} boutique(s)`,
+            message: partial
+                ? `Produit créé dans ${inserted.length}/${boutiques.length} boutique(s) seulement`
+                : `Produit créé dans ${inserted.length} boutique(s)`,
+            partial,
             produits: inserted.map(p => ({
                 boutique_id: p.boutique_id,
                 produit_id: p._id,
@@ -95,6 +118,7 @@ export const createProduit = async (c: Context) => {
     try {
         const body = await c.req.json();
 
+        if (!body.name || !body.name.trim()) return c.json({ error: "Le nom du produit est requis" }, 400);
         if (!body.boutique_id) return c.json({ error: "L'ID de la boutique est requis" }, 400);
         if (body.stock === undefined || body.stock < 0) return c.json({ error: "Le stock doit être un nombre positif" }, 400);
         if (!body.unit || !Object.values(UnitType).includes(body.unit)) return c.json({ error: "L'unité doit être valide" }, 400);
@@ -119,21 +143,32 @@ export const createProduit = async (c: Context) => {
 
 export const getAllProduits = async (c: Context) => {
     try {
-        // Récupérer tous les paramètres, y compris search
-        const { page = "1", limit = "50", boutique_id, search } = c.req.query();
+        // Récupérer tous les paramètres, y compris search et sort
+        const { page = "1", limit = "50", boutique_id, search, sort = "recent" } = c.req.query();
         const pageNum = Math.max(1, parseInt(page));
         const limitNum = Math.min(200, Math.max(1, parseInt(limit)));
         const skip = (pageNum - 1) * limitNum;
+
+        // ✅ Tri configurable. Par défaut "recent" → les produits fraîchement créés
+        //    apparaissent EN TÊTE (corrige "je crée un produit et je ne le retrouve pas")
+        const sortMap: { [key: string]: any } = {
+            recent: { createdAt: -1 },
+            name: { name: 1 },
+            stock: { stock: 1 },
+            price: { basePrice: 1 },
+        };
+        const sortBy = sortMap[sort] || sortMap.recent;
 
         const filter: any = {};
         if (boutique_id) filter.boutique_id = boutique_id;
 
         // 🔥 FILTRE SUR LE NOM (et éventuellement description/catégorie)
         if (search && search.trim() !== "") {
+            const safe = escapeRegex(search.trim());
             filter.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { description: { $regex: search, $options: "i" } },
-                { category: { $regex: search, $options: "i" } }
+                { name: { $regex: safe, $options: "i" } },
+                { description: { $regex: safe, $options: "i" } },
+                { category: { $regex: safe, $options: "i" } }
             ];
         }
 
@@ -141,9 +176,9 @@ export const getAllProduits = async (c: Context) => {
             Produit.find(filter)
                 .populate("boutique_id", "name address")
                 .lean()
+                .sort(sortBy)
                 .skip(skip)
-                .limit(limitNum)
-                .sort({ name: 1 }),
+                .limit(limitNum),
             Produit.countDocuments(filter),
         ]);
 
@@ -317,25 +352,32 @@ export const transfertStockBoutiques = async (c: Context) => {
             ? convertUnit(quantity, unitToUse, produitSrc.unit)
             : quantity;
 
-        if (produitSrc.stock < quantityToTransfer) {
+        // ✅ FIX : déduction source ATOMIQUE et conditionnelle (anti stock négatif/concurrence)
+        const srcUpdated = await Produit.findOneAndUpdate(
+            { _id: produitSrc._id, stock: { $gte: quantityToTransfer } },
+            { $inc: { stock: -quantityToTransfer } },
+            { new: true }
+        ).lean();
+
+        if (!srcUpdated) {
             return c.json({
                 error: `Stock insuffisant. Disponible: ${produitSrc.stock} ${produitSrc.unit}`,
             }, 400);
         }
 
-        // ✅ FIX : updateMany en parallèle (2 $inc atomiques simultanés)
-        const [srcUpdated, destUpdated] = await Promise.all([
-            Produit.findByIdAndUpdate(
-                produitSrc._id,
-                { $inc: { stock: -quantityToTransfer } },
-                { new: true }
-            ).lean(),
-            Produit.findByIdAndUpdate(
+        // ✅ Crédit destination APRÈS le débit source. Si ça échoue, on recrédite
+        //    la source (compensation) pour ne pas faire disparaître du stock.
+        let destUpdated;
+        try {
+            destUpdated = await Produit.findByIdAndUpdate(
                 produitDest._id,
                 { $inc: { stock: quantityToTransfer } },
                 { new: true }
-            ).lean(),
-        ]);
+            ).lean();
+        } catch (e) {
+            await Produit.findByIdAndUpdate(produitSrc._id, { $inc: { stock: quantityToTransfer } });
+            throw e;
+        }
 
         return c.json({
             success: true,
@@ -376,12 +418,6 @@ export const vendreProduit = async (c: Context) => {
         const unitSold = unit || produit.unit;
         const quantityDeducted = convertUnit(quantity, unitSold, produit.unit);
 
-        if (produit.stock < quantityDeducted) {
-            return c.json({
-                error: `Stock insuffisant. Disponible: ${produit.stock} ${produit.unit}`,
-            }, 400);
-        }
-
         let totalPrice: number;
         let unitPrice: number;
 
@@ -395,14 +431,25 @@ export const vendreProduit = async (c: Context) => {
 
         const oldStock = produit.stock;
 
-        // ✅ FIX : $inc atomique + création vente en parallèle
-        const [updatedProduit, nouvelleVente] = await Promise.all([
-            Produit.findByIdAndUpdate(
-                id,
-                { $inc: { stock: -quantityDeducted } },
-                { new: true }
-            ).lean(),
-            Vente.create({
+        // ✅ FIX : déduction ATOMIQUE et conditionnelle.
+        //    Le filtre stock >= quantité empêche la survente concurrente ET un stock négatif.
+        const updatedProduit = await Produit.findOneAndUpdate(
+            { _id: id, stock: { $gte: quantityDeducted } },
+            { $inc: { stock: -quantityDeducted } },
+            { new: true }
+        ).lean();
+
+        if (!updatedProduit) {
+            return c.json({
+                error: `Stock insuffisant. Disponible: ${produit.stock} ${produit.unit}`,
+            }, 400);
+        }
+
+        // ✅ La vente est créée APRÈS la déduction réussie. Si elle échoue, on
+        //    recrédite le stock (compensation) pour ne pas "perdre" du stock.
+        let nouvelleVente;
+        try {
+            nouvelleVente = await Vente.create({
                 boutique_id: produit.boutique_id,
                 items: [{
                     productId: produit._id,
@@ -416,8 +463,11 @@ export const vendreProduit = async (c: Context) => {
                 }],
                 totalAmount: totalPrice,
                 date: new Date(),
-            }),
-        ]);
+            });
+        } catch (e) {
+            await Produit.findByIdAndUpdate(id, { $inc: { stock: quantityDeducted } });
+            throw e;
+        }
 
         return c.json({
             success: true,
@@ -434,6 +484,44 @@ export const vendreProduit = async (c: Context) => {
                 details: { quantitySold: quantity, unitSold, quantityDeducted, unitPrice, totalPrice },
             },
         });
+    } catch (error) {
+        return c.json({ error: (error as Error).message }, 500);
+    }
+};
+
+// ─── Stats globales (sur tout le filtre, pas seulement la page affichée) ──────
+export const getProduitsStats = async (c: Context) => {
+    try {
+        const { boutique_id, search } = c.req.query();
+
+        const match: any = {};
+        if (boutique_id && mongoose.Types.ObjectId.isValid(boutique_id)) {
+            // ⚠️ aggregate ne caste PAS automatiquement → on caste à la main
+            match.boutique_id = new mongoose.Types.ObjectId(boutique_id);
+        }
+        if (search && search.trim() !== "") {
+            const safe = escapeRegex(search.trim());
+            match.$or = [
+                { name: { $regex: safe, $options: "i" } },
+                { description: { $regex: safe, $options: "i" } },
+                { category: { $regex: safe, $options: "i" } },
+            ];
+        }
+
+        const [agg] = await Produit.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: 1 },
+                    stockTotal: { $sum: "$stock" },
+                    lowStock: { $sum: { $cond: [{ $and: [{ $gt: ["$stock", 0] }, { $lt: ["$stock", 10] }] }, 1, 0] } },
+                    outOfStock: { $sum: { $cond: [{ $eq: ["$stock", 0] }, 1, 0] } },
+                },
+            },
+        ]);
+
+        return c.json(agg || { total: 0, stockTotal: 0, lowStock: 0, outOfStock: 0 });
     } catch (error) {
         return c.json({ error: (error as Error).message }, 500);
     }
