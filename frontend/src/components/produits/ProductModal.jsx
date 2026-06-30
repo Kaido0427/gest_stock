@@ -4,6 +4,7 @@ import { X, Store, Check, ChevronDown, RefreshCw } from "lucide-react";
 import { useAddProduit, useAddProduitMultiBoutiques, useUpdateProduit } from "../../hooks/useProducts";
 import { getAllBoutiques } from "../../services/boutique";
 import { useQuery } from "@tanstack/react-query";
+import { useCurrentUser } from "../../hooks/useAuth";
 
 const CATEGORIES = [
   "Produits chimiques", "Plastique yaourt et jus", "Plastic Pch.",
@@ -35,6 +36,7 @@ const inputCls = "w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-2
 const ProductModal = ({ isOpen, onClose, product }) => {
   const addMulti = useAddProduitMultiBoutiques();
   const update = useUpdateProduit();
+  const { data: currentUser } = useCurrentUser();
 
   const isLoading = addMulti.isPending || update.isPending;
 
@@ -43,7 +45,7 @@ const ProductModal = ({ isOpen, onClose, product }) => {
   });
   const [selectedBoutiques, setSelectedBoutiques] = useState([]);
 
-  const { data: boutiques = [], isLoading: loadingBoutiques } = useQuery({
+  const { data: allBoutiques = [], isLoading: loadingBoutiques } = useQuery({
     queryKey: ["boutiques"],
     queryFn: async () => {
       const res = await getAllBoutiques();
@@ -53,6 +55,15 @@ const ProductModal = ({ isOpen, onClose, product }) => {
     enabled: isOpen,
     staleTime: 60_000,
   });
+
+  // ✅ Un employé ne voit QUE sa propre boutique dans le formulaire de création.
+  //    Un admin voit toutes les boutiques.
+  const boutiques = (() => {
+    if (!currentUser || currentUser.role === "admin") return allBoutiques;
+    const bid = currentUser.boutique?.id || currentUser.boutique?._id;
+    if (!bid) return [];
+    return allBoutiques.filter(b => b._id === bid || b._id?.toString() === bid?.toString());
+  })();
 
   useEffect(() => {
     if (!isOpen) return;

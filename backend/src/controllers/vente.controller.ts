@@ -65,112 +65,114 @@ export const validerVente = async (c: Context) => {
         let totalAmount = 0;
         let boutique_id: Types.ObjectId | null = null;
 
+        // ─── Phase 1 : validation et lecture (sans toucher au stock) ──────────
+        const resolvedItems: Array<{
+            produit: any;
+            unitSold: string;
+            quantityDeducted: number;
+            itemTotal: number;
+            unitPrice: number;
+            item: any;
+        }> = [];
+
         for (const item of body.items) {
-            console.log("🔹 Traitement item :", item);
-
-            try {
-                // Validation de base
-                if (!item.productId || !item.quantity || item.quantity <= 0) {
-                    errors.push(`Item incomplet: ${item.productName || 'Inconnu'}`);
-                    console.warn("❌ Item incomplet :", item);
-                    continue;
-                }
-
-                const produit = await Produit.findById(item.productId);
-                if (!produit) {
-                    errors.push(`Produit introuvable: ${item.productName || item.productId}`);
-                    console.warn("❌ Produit introuvable :", item.productId);
-                    continue;
-                }
-
-                // Capturer le boutique_id du premier produit
-                if (!boutique_id) {
-                    boutique_id = produit.boutique_id;
-                }
-
-                // ✅ Déterminer l'unité de vente
-                const unitSold = item.unit || produit.unit;
-
-                // ✅ Convertir la quantité vendue en unité de base
-                const quantityDeducted = convertUnit(item.quantity, unitSold, produit.unit);
-
-                // Vérifier le stock
-                if (produit.stock < quantityDeducted) {
-                    errors.push(
-                        `Stock insuffisant pour ${produit.name}: ${produit.stock} ${produit.unit} disponible, ${quantityDeducted} ${produit.unit} demandé`
-                    );
-                    console.warn("❌ Stock insuffisant :", {
-                        productId: produit._id,
-                        available: produit.stock,
-                        requested: quantityDeducted
-                    });
-                    continue;
-                }
-
-                // ✅ Calculer le prix (avec possibilité de prix personnalisé)
-                let itemTotal: number;
-                let unitPrice: number;
-
-                if (item.customPrice !== undefined && item.customPrice >= 0) {
-                    itemTotal = item.customPrice;
-                    unitPrice = item.customPrice / item.quantity;
-                } else if (item.price !== undefined && item.price >= 0) {
-                    // Prix unitaire fourni directement
-                    unitPrice = item.price;
-                    itemTotal = item.price * item.quantity;
-                } else {
-                    // Calculer selon le prix de base
-                    itemTotal = calculatePrice(produit.basePrice, produit.unit, unitSold, item.quantity);
-                    unitPrice = itemTotal / item.quantity;
-                }
-
-                // ✅ Déduire du stock
-                const oldStock = produit.stock;
-                produit.stock -= quantityDeducted;
-                await produit.save();
-
-                // ✅ Ajouter à la liste des items vendus
-                ventesItems.push({
-                    productId: produit._id,
-                    productName: produit.name,
-                    quantitySold: item.quantity,
-                    unitSold: unitSold,
-                    quantityDeducted: quantityDeducted,
-                    unitBase: produit.unit,
-                    unitPrice: unitPrice,
-                    total: itemTotal
-                });
-
-                totalAmount += itemTotal;
-
-                console.log("✅ Item vendu :", {
-                    productId: produit._id,
-                    oldStock,
-                    newStock: produit.stock,
-                    quantitySold: item.quantity,
-                    unitSold,
-                    quantityDeducted
-                });
-
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                errors.push(`Erreur avec ${item.productName || 'un item'}: ${msg}`);
-                console.error("🔥 Erreur item :", msg);
+            if (!item.productId || !item.quantity || item.quantity <= 0) {
+                errors.push(`Item incomplet: ${item.productName || 'Inconnu'}`);
+                continue;
             }
+
+            const produit = await Produit.findById(item.productId).lean();
+            if (!produit) {
+                errors.push(`Produit introuvable: ${item.productName || item.productId}`);
+                continue;
+            }
+
+            if (!boutique_id) boutique_id = produit.boutique_id;
+
+            const unitSold = item.unit || produit.unit;
+            let quantityDeducted: number;
+            try {
+                quantityDeducted = convertUnit(item.quantity, unitSold, produit.unit);
+            } catch {
+                errors.push(`Unités incompatibles pour ${produit.name}: "${unitSold}" → "${produit.unit}"`);
+                continue;
+            }
+
+            if (produit.stock < quantityDeducted) {
+                errors.push(`Stock insuffisant pour ${produit.name}: ${produit.stock} ${produit.unit} disponible, ${quantityDeducted} ${produit.unit} demandé`);
+                continue;
+            }
+
+            let itemTotal: number;
+            let unitPrice: number;
+            if (item.customPrice !== undefined && item.customPrice >= 0) {
+                itemTotal = item.customPrice;
+                unitPrice = item.customPrice / item.quantity;
+            } else if (item.price !== undefined && item.price >= 0) {
+                unitPrice = item.price;
+                itemTotal = item.price * item.quantity;
+            } else {
+                itemTotal = calculatePrice(produit.basePrice, produit.unit, unitSold, item.quantity);
+                unitPrice = itemTotal / item.quantity;
+            }
+
+            resolvedItems.push({ produit, unitSold, quantityDeducted, itemTotal, unitPrice, item });
         }
 
-        if (ventesItems.length === 0 && errors.length > 0) {
-            console.warn("❌ Toutes les ventes ont échoué :", errors);
+        if (resolvedItems.length === 0) {
             return c.json({ error: "Échec de la vente", details: errors }, 400);
         }
 
-        // ✅ Enregistrer la vente globale
-        const nouvelleVente = await Vente.create({
-            boutique_id: boutique_id,
-            items: ventesItems,
-            totalAmount: totalAmount,
-            date: body.date ? new Date(body.date) : new Date()
-        });
+        // ─── Phase 2 : déduction atomique du stock ────────────────────────────
+        //    findOneAndUpdate avec filtre stock >= qty → impossible d'aller en négatif
+        //    On garde une trace pour compensation si l'enregistrement de la vente échoue.
+        const deducted: Array<{ id: any; qty: number }> = [];
+        for (const r of resolvedItems) {
+            const updated = await Produit.findOneAndUpdate(
+                { _id: r.produit._id, stock: { $gte: r.quantityDeducted } },
+                { $inc: { stock: -r.quantityDeducted } },
+                { new: true }
+            );
+            if (!updated) {
+                // Stock est passé entre-temps (vente concurrente) → on ignore cet item
+                errors.push(`Stock épuisé en temps réel pour ${r.produit.name}`);
+                continue;
+            }
+            deducted.push({ id: r.produit._id, qty: r.quantityDeducted });
+            ventesItems.push({
+                productId: r.produit._id,
+                productName: r.produit.name,
+                quantitySold: r.item.quantity,
+                unitSold: r.unitSold,
+                quantityDeducted: r.quantityDeducted,
+                unitBase: r.produit.unit,
+                unitPrice: r.unitPrice,
+                total: r.itemTotal,
+            });
+            totalAmount += r.itemTotal;
+        }
+
+        if (ventesItems.length === 0) {
+            return c.json({ error: "Échec de la vente", details: errors }, 400);
+        }
+
+        // ─── Phase 3 : enregistrement de la vente ────────────────────────────
+        //    Si ça échoue ici, on recrédite tous les stocks déduits (compensation).
+        let nouvelleVente;
+        try {
+            nouvelleVente = await Vente.create({
+                boutique_id: boutique_id,
+                items: ventesItems,
+                totalAmount: totalAmount,
+                date: body.date ? new Date(body.date) : new Date()
+            });
+        } catch (e) {
+            // Compensation : recréditer tout le stock déduit
+            await Promise.all(
+                deducted.map(d => Produit.findByIdAndUpdate(d.id, { $inc: { stock: d.qty } }))
+            );
+            throw e;
+        }
 
         let message = "Vente validée avec succès";
         if (errors.length > 0) message = `Vente partiellement validée. ${errors.length} erreur(s)`;

@@ -44,9 +44,10 @@ const SalesPage = () => {
 
   // ✅ Récupère TOUS les produits sans limite (limit=9999)
   // Le hook useProduits passe les params à l'API → plus de troncature silencieuse
+  // ✅ id et _id sont tous deux renvoyés par le backend pour être robuste
   const boutiqueId =
     user?.role === "employe" && user?.boutique
-      ? user.boutique._id || user.boutique.id
+      ? (user.boutique.id || user.boutique._id)
       : undefined;
 
   const {

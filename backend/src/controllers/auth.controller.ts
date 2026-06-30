@@ -10,18 +10,21 @@ const tokenBlacklist = new Set<string>();
 export class AuthController {
     static async register(c: Context) {
         try {
-            const { email, password, role, name } = await c.req.json();
+            const { email, password, role, name, boutique_id } = await c.req.json();
 
             const exists = await User.findOne({ email });
             if (exists) return c.json({ error: "Email déjà utilisé" }, 400);
 
             const hashed = await bcrypt.hash(password, 10);
 
-            const user = await User.create({ 
-                email, 
-                password: hashed, 
-                role: role || "user",
-                name 
+            const user = await User.create({
+                email,
+                password: hashed,
+                role: role || "employe",
+                name,
+                // ✅ Si on crée un compte employé pour une boutique spécifique,
+                //    on le lie directement → getMe le retrouve sans ambiguïté
+                ...(boutique_id ? { boutique_id } : {})
             });
 
             const token = generateToken(user._id.toString());
@@ -106,23 +109,34 @@ static async getMe(c: Context) {
     ) as { userId: string };
     
     const user = await User.findById(decoded.userId).select("-password");
-    
+
     if (!user) {
       return c.json({ error: "Utilisateur introuvable" }, 404);
     }
-    
-    // Récupérer la boutique SEULEMENT si ce n'est PAS un admin
+
+    // ✅ Pour un employé : cherche sa boutique en priorité via boutique_id
+    //    (compte secondaire), sinon via responsable_id (compte principal).
+    //    Double filet → aucun employé ne se retrouve sans boutique.
     let boutique = null;
     if (user.role !== "admin") {
-      boutique = await Boutique.findOne({ responsable_id: user._id });
+      const userAny = user as any;
+      if (userAny.boutique_id) {
+        boutique = await Boutique.findById(userAny.boutique_id);
+      }
+      if (!boutique) {
+        boutique = await Boutique.findOne({ responsable_id: user._id });
+      }
     }
-    
+
     return c.json({
       id: user._id,
       email: user.email,
       role: user.role,
+      name: (user as any).name ?? null,
       boutique: boutique ? {
-        id: boutique._id,
+        // ✅ On renvoie TOUJOURS id (string) pour que le front puisse l'utiliser
+        id: boutique._id.toString(),
+        _id: boutique._id.toString(),
         name: boutique.name,
         description: boutique.description,
         address: boutique.address,
